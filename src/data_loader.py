@@ -49,18 +49,28 @@ RAW_COLUMN_MAPPING = {
     "y": "DEFAULT"
 }
 
-# Immutable demographic features: The model must NEVER demand changes to these
+# Base project directory for robust cross-environment file resolution
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+DEFAULT_DATA_PATH = os.path.join(BASE_DIR, "data", "credit_card_clean.csv")
+
+# Immutable demographic features: The model and recourse engine must NEVER demand changes to these
 IMMUTABLE_FEATURES = ["SEX", "AGE", "EDUCATION", "MARRIAGE"]
 
-# Semi-mutable features: Behavioral credit history that improves gradually
-SEMI_MUTABLE_FEATURES = ["PAY_1", "PAY_2", "PAY_3", "PAY_4", "PAY_5", "PAY_6"]
-
-# Mutable and directly actionable financial features
-ACTIONABLE_FEATURES = [
-    "LIMIT_BAL",
-    "BILL_AMT1", "BILL_AMT2", "BILL_AMT3", "BILL_AMT4", "BILL_AMT5", "BILL_AMT6",
-    "PAY_AMT1", "PAY_AMT2", "PAY_AMT3", "PAY_AMT4", "PAY_AMT5", "PAY_AMT6"
+# Historical payment records: Past events that cannot be retroactively altered in the present
+HISTORICAL_FEATURES = [
+    "PAY_2", "PAY_3", "PAY_4", "PAY_5", "PAY_6",
+    "BILL_AMT2", "BILL_AMT3", "BILL_AMT4", "BILL_AMT5", "BILL_AMT6",
+    "PAY_AMT2", "PAY_AMT3", "PAY_AMT4", "PAY_AMT5", "PAY_AMT6"
 ]
+
+# Institutional features: Dictated by the lender/card issuer, not unilaterally set by applicant
+INSTITUTIONAL_FEATURES = ["LIMIT_BAL"]
+
+# Directly actionable financial levers: Current behaviors the applicant can execute today
+# 1. PAY_1: Settle current delinquency to achieve on-time repayment status (<= 0)
+# 2. BILL_AMT1: Pay down outstanding card balance (debt reduction)
+# 3. PAY_AMT1: Increase current monthly payment towards the bill
+ACTIONABLE_FEATURES = ["PAY_1", "BILL_AMT1", "PAY_AMT1"]
 
 # Human-readable labels for categorical codes (Spanish / English for bilingual UI)
 CATEGORICAL_LABELS = {
@@ -80,7 +90,7 @@ CATEGORICAL_LABELS = {
 
 
 def download_and_clean_data(
-    cache_path: str = "data/credit_card_clean.csv",
+    cache_path: str = DEFAULT_DATA_PATH,
     force_download: bool = False
 ) -> pd.DataFrame:
     """
@@ -136,7 +146,7 @@ def download_and_clean_data(
 def get_train_test_data(
     test_size: float = 0.2,
     random_state: int = 42,
-    cache_path: str = "data/credit_card_clean.csv"
+    cache_path: str = DEFAULT_DATA_PATH
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
     """
     Splits the cleaned dataset into stratified train and test sets.

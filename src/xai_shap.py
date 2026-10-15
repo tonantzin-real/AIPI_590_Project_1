@@ -21,8 +21,11 @@ import matplotlib.pyplot as plt
 
 # Relative import
 import sys
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.append(BASE_DIR)
 from src.data_loader import get_train_test_data, RAW_COLUMN_MAPPING
+
+DEFAULT_MODEL_PATH = os.path.join(BASE_DIR, "models", "credit_model.joblib")
 
 
 class CreditSHAPExplainer:
@@ -32,7 +35,7 @@ class CreditSHAPExplainer:
     explanations.
     """
 
-    def __init__(self, model_path: str = "models/credit_model.joblib"):
+    def __init__(self, model_path: str = DEFAULT_MODEL_PATH):
         """
         Loads the serialized credit risk model and initializes TreeExplainer.
         """

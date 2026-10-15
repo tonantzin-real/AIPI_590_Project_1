@@ -5,7 +5,8 @@ PROJECT: AIPI 590 - Project 1: ¿Por qué me rechazaron?
 AUTHOR: Tonantzin Real Rojas
 DESCRIPTION:
     Interactive portfolio artifact demonstrating Explainable AI, Algorithmic
-    Recourse (DiCE), and Fairness Auditing for credit scoring underwriting.
+    Recourse (DiCE), and Multi-Dimensional Fairness Auditing with Statistical
+    Significance Testing for credit scoring underwriting.
     Designed for loan applicants, risk officers, and financial regulators.
 =============================================================================
 """
@@ -19,13 +20,15 @@ import streamlit as st
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-# Relative imports
+# Relative imports with robust base directory resolution
 import sys
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.append(BASE_DIR)
 from src.data_loader import (
     CATEGORICAL_LABELS,
     IMMUTABLE_FEATURES,
-    ACTIONABLE_FEATURES
+    ACTIONABLE_FEATURES,
+    DEFAULT_DATA_PATH
 )
 from src.xai_shap import CreditSHAPExplainer
 from src.xai_recourse import CreditRecourseEngine
@@ -50,7 +53,7 @@ st.markdown("""
         margin-bottom: 0.2rem;
     }
     .sub-header {
-        font-size: 1.1rem;
+        font-size: 1.05rem;
         color: #4b5563;
         margin-bottom: 1.5rem;
     }
@@ -87,11 +90,17 @@ st.markdown("""
 @st.cache_resource
 def load_models_and_engines():
     """Loads serialized model, SHAP explainer, and DiCE recourse engine."""
-    model = joblib.load("models/credit_model.joblib")
-    with open("models/model_metadata.json", "r") as f:
+    model_path = os.path.join(BASE_DIR, "models", "credit_model.joblib")
+    meta_path = os.path.join(BASE_DIR, "models", "model_metadata.json")
+    model = joblib.load(model_path)
+    with open(meta_path, "r") as f:
         metadata = json.load(f)
-    shap_explainer = CreditSHAPExplainer()
-    recourse_engine = CreditRecourseEngine(sample_size=1500)
+    shap_explainer = CreditSHAPExplainer(model_path=model_path)
+    recourse_engine = CreditRecourseEngine(
+        model_path=model_path,
+        data_path=os.path.join(BASE_DIR, "data", "credit_card_clean.csv"),
+        sample_size=1500
+    )
     return model, metadata, shap_explainer, recourse_engine
 
 
@@ -230,7 +239,12 @@ with tab1:
             st.markdown('<span class="badge-approved">✅ SOLICITUD APROBADA (Confiable)</span>', unsafe_allow_html=True)
 
     with col_res2:
-        st.metric("Probabilidad de Incumplimiento:", f"{proba_default:.1%}", delta=f"{(proba_default - threshold):+.1%} vs Umbral", delta_color="inverse")
+        st.metric(
+            "Probabilidad de Incumplimiento:",
+            f"{proba_default:.1%}",
+            delta=f"{(proba_default - threshold):+.1%} vs Umbral",
+            delta_color="inverse"
+        )
 
     with col_res3:
         st.markdown(f"""
@@ -248,7 +262,7 @@ with tab1:
         El solicitante tiene derecho a conocer **planes de acción mínimos y viables** para revertir la decisión.
         """)
 
-        with st.spinner("Calculando rutas accionables sin modificar atributos protegidos..."):
+        with st.spinner("Calculando rutas accionables bajo restricciones estrictas de accionabilidad..."):
             cfs_df, deltas_df, mean_burden = recourse_engine.generate_recourse_plans(applicant_df, total_cfs=2)
 
         if not deltas_df.empty:
@@ -260,11 +274,11 @@ with tab1:
                     for col_name, val_str in row.items():
                         if col_name not in ["Plan_ID", "Normalized_Burden"]:
                             st.info(f"**{col_name}:** {val_str}")
-                    st.caption("🔒 *Atributos inmutables (Edad, Género, Estado Civil) se mantuvieron estrictamente congelados.*")
+                    st.caption("🔒 *Atributos inmutables (Edad, Género, Educación, Estado Civil), historial previo y límites bancarios se mantuvieron estrictamente congelados.*")
             
             st.success(f"**Esfuerzo Algorítmico Promedio (Distancia L1 Normalizada):** {mean_burden:.2f}")
         else:
-            st.warning("No se encontró un contra factual viable dentro de los límites de un solo paso. Se requiere reestructuración integral de deuda.")
+            st.warning("No se encontró un contra factual viable dentro de los límites de un solo paso. Se requiere reestructuración integral de deuda a mediano plazo.")
     else:
         st.balloons()
         st.success("¡Felicidades! Este perfil califica directamente para la aprobación de crédito.")
@@ -312,8 +326,9 @@ with tab2:
             st.dataframe(deltas_df, use_container_width=True)
             st.markdown("""
             **Ventajas Clave de DiCE / Algorithmic Recourse:**
-            - **Accionabilidad:** Solo recomienda cambios en variables financieras mutables.
-            - **No Discriminación:** Bloquea explícitamente variables protegidas (Género, Edad).
+            - **Accionabilidad Estricta:** Solo modifica palancas financieras presentes (`PAY_1`, `BILL_AMT1`, `PAY_AMT1`).
+            - **No Discriminación:** Bloquea explícitamente variables protegidas (Género, Edad, Educación, Estado Civil).
+            - **Restricción Causal y Temporal:** No altera el historial crediticio pasado (`PAY_2..6`) ni límites fijados por el banco (`LIMIT_BAL`).
             - **Minimización de Esfuerzo:** Identifica la ruta de menor fricción financiera ($L_1$ distance).
             """)
         else:
@@ -326,60 +341,119 @@ with tab2:
 with tab3:
     st.subheader("Auditoría Regulatoria de Equidad y Carga Algorítmica")
     st.markdown("""
-    Evaluación empírica sobre si el modelo de crédito y el motor de recursos imponen una **Carga Algorítmica Desproporcionada** 
-    a grupos históricamente vulnerables (Género y Grupos de Edad).
+    Evaluación empírica en el **conjunto de prueba fuera de muestra (hold-out test set)** para evaluar si el modelo de crédito 
+    impone una **Carga Algorítmica Desproporcionada** a través de 4 dimensiones demográficas (Género, Edad, Educación y Estado Civil).
     """)
 
-    # Load Audit Results
-    audit_json_path = "models/audit_disparity_results.json"
+    audit_json_path = os.path.join(BASE_DIR, "models", "audit_disparity_results.json")
     if os.path.exists(audit_json_path):
         with open(audit_json_path, "r") as f:
             audit_data = json.load(f)
 
-        col_m1, col_m2, col_m3 = st.columns(3)
-        with col_m1:
-            st.metric(
-                "Razón de Disparidad por Género:",
-                f"{audit_data['gender_disparity_ratio']:.3f}x",
-                delta=f"+{(audit_data['gender_disparity_ratio'] - 1.0):.1%} vs Paridad (1.00x)",
-                delta_color="inverse"
-            )
-            st.caption("Esfuerzo promedio requerido por mujeres vs. hombres para revertir una denegación.")
+        comps = audit_data["comparisons"]
+        overall = audit_data["overall"]
 
-        with col_m2:
-            st.metric(
-                "Razón de Disparidad por Edad:",
-                f"{audit_data['age_disparity_ratio']:.3f}x",
-                delta=f"+{(audit_data['age_disparity_ratio'] - 1.0):.1%} vs Paridad (1.00x)",
-                delta_color="inverse"
-            )
-            st.caption("Esfuerzo promedio requerido por jóvenes (<30 años) vs. adultos establecidos.")
+        # 4 Key Demographic Dimensions Cards
+        st.markdown("#### 1. Razones de Disparidad por Dimensión Demográfica")
+        col_g, col_a, col_e, col_m = st.columns(4)
 
-        with col_m3:
-            st.metric("Tasa de Factibilidad de Recurso:", "100.0%", delta="Ruta viable encontrada")
-            st.caption("Porcentaje de solicitantes rechazados que obtuvieron al menos 1 ruta factible.")
+        with col_g:
+            g_comp = comps["gender"]
+            ratio_g = g_comp["disparity_ratio"]
+            st.metric(
+                "Género (Mujer / Hombre):",
+                f"{ratio_g:.3f}x",
+                delta=f"{(ratio_g - 1.0):+.1%} vs Paridad (1.00x)",
+                delta_color="off" if not g_comp["is_statistically_significant"] else "inverse"
+            )
+            st.caption(f"Welch t-test: p = {g_comp['welch_t_pvalue']:.3f} ({'Significativo' if g_comp['is_statistically_significant'] else 'Paridad Estadística'})")
+
+        with col_a:
+            a_comp = comps["age"]
+            ratio_a = a_comp["disparity_ratio"]
+            st.metric(
+                "Edad (Jóvenes / Mayores):",
+                f"{ratio_a:.3f}x",
+                delta=f"{(ratio_a - 1.0):+.1%} vs Paridad (1.00x)",
+                delta_color="off" if not a_comp["is_statistically_significant"] else "inverse"
+            )
+            st.caption(f"Welch t-test: p = {a_comp['welch_t_pvalue']:.3f} ({'Significativo' if a_comp['is_statistically_significant'] else 'No significativo'})")
+
+        with col_e:
+            e_comp = comps["education"]
+            ratio_e = e_comp["disparity_ratio"]
+            st.metric(
+                "Educación (Media / Superior):",
+                f"{ratio_e:.3f}x",
+                delta=f"{(ratio_e - 1.0):+.1%} vs Paridad (1.00x)",
+                delta_color="off" if not e_comp["is_statistically_significant"] else "inverse"
+            )
+            st.caption(f"Welch t-test: p = {e_comp['welch_t_pvalue']:.3f} ({'Significativo' if e_comp['is_statistically_significant'] else 'Paridad Estadística'})")
+
+        with col_m:
+            m_comp = comps["marriage"]
+            ratio_m = m_comp["disparity_ratio"]
+            st.metric(
+                "Estado Civil (Soltero / Casado):",
+                f"{ratio_m:.3f}x",
+                delta=f"{(ratio_m - 1.0):+.1%} vs Paridad (1.00x)",
+                delta_color="off" if not m_comp["is_statistically_significant"] else "inverse"
+            )
+            st.caption(f"Welch t-test: p = {m_comp['welch_t_pvalue']:.3f} ({'Significativo' if m_comp['is_statistically_significant'] else 'Paridad Estadística'})")
 
         st.markdown("---")
 
-        col_plot, col_recs = st.columns([1.2, 1])
+        # Overall Metrics Cards
+        col_ov1, col_ov2, col_ov3 = st.columns(3)
+        with col_ov1:
+            st.metric("Tasa de Factibilidad Global:", f"{overall['feasibility_rate_pct']:.1f}%", delta="Rutas viables encontradas")
+            st.caption(f"{overall['successful_total']} de {overall['evaluated_total']} solicitudes evaluadas en test.")
+        with col_ov2:
+            st.metric("Carga Algorítmica Media:", f"{overall['mean_burden']:.2f}", delta=f"IC 95%: [{overall['ci_95_lower']:.2f}, {overall['ci_95_upper']:.2f}]")
+            st.caption("Distancia L1 normalizada en desviaciones estándar poblacionales.")
+        with col_ov3:
+            st.metric("Población de Rechazo en Test:", f"{audit_data['metadata']['model_rejected_sample_size']:,}", delta=f"De {audit_data['metadata']['test_sample_size']:,} casos de prueba")
+            st.caption("Solicitudes con P(default) >= 50% en conjunto de prueba.")
+
+        st.markdown("---")
+
+        col_plot, col_recs = st.columns([1.3, 1])
         with col_plot:
-            st.markdown("#### Distribución de Esfuerzo Normalizado L1")
-            plot_img_path = "models/audit_disparity_plot.png"
+            st.markdown("#### Distribución de Esfuerzo Normalizado L1 (Con Intervalos de Confianza 95%)")
+            plot_img_path = os.path.join(BASE_DIR, "models", "audit_disparity_plot.png")
             if os.path.exists(plot_img_path):
                 st.image(plot_img_path, use_container_width=True)
 
         with col_recs:
-            st.markdown("#### 🏛️ Implicaciones para la Regulación Mexicana (CONDUSEF & Ley Fintech)")
-            st.markdown("""
-            1. **Disparidad de Género Detectada (+7.1%):**  
-               Las solicitantes mujeres enfrentan un umbral de esfuerzo financiero 7.1% mayor para revertir un rechazo, 
-               reflejando sesgos históricos en las líneas de crédito base asignadas.
-            2. **Disparidad por Edad (+15.8%):**  
-               Los jóvenes menores de 30 años sufren la mayor penalización en distancia de recurso debido a su menor 
-               antigüedad crediticia.
-            3. **Recomendación de Política Pública:**  
-               La CONDUSEF debe exigir que las entidades fintech no solo presenten explicaciones de variables globales (SHAP), 
-               sino que auditen formalmente las métricas de **Recourse Disparity Ratio** para garantizar una verdadera inclusión financiera.
+            st.markdown("#### 🏛️ Conclusiones y Recomendaciones Regulatorias (CONDUSEF & Ley Fintech)")
+            st.markdown(f"""
+            1. **Paridad Estadística de Género (Razón: {ratio_g:.2f}x, p = {g_comp['welch_t_pvalue']:.3f}):**  
+               Bajo restricciones estrictas de accionabilidad (congelando historial pasado y atributos protegidos), la diferencia de esfuerzo entre hombres y mujeres es estadísticamente indistinguible de cero ($p > 0.05$).
+            2. **Tendencia Moderada por Edad (Razón: {ratio_a:.2f}x, p = {a_comp['welch_t_pvalue']:.3f}):**  
+               Los jóvenes menores de 30 años exhiben un esfuerzo promedio {((ratio_a - 1.0) * 100):.1f}% mayor que adultos consolidados, reflejando menor profundidad histórica.
+            3. **Brecha de Factibilidad por Educación:**  
+               Aunque la distancia media es equivalente ({ratio_e:.2f}x, $p = {e_comp['welch_t_pvalue']:.3f}$), los solicitantes con educación superior alcanzaron 85.0% de factibilidad frente a 73.8% en educación media, indicando mayor vulnerabilidad a rechazos irreversibles en el corto plazo.
+            4. **Recomendación de Política Pública:**  
+               La CONDUSEF debe exigir que las entidades fintech auditen formalmente las **tasas de factibilidad y pruebas de hipótesis de carga algorítmica** antes de desplegar modelos de crédito autónomos.
             """)
+
+        # Statistical Testing Detail Expander
+        with st.expander("🔬 Ver Detalles de Pruebas de Hipótesis y Métricas Estadísticas"):
+            st.markdown("### Tabla Comparativa de Pruebas Estadísticas")
+            detail_records = []
+            for dim_key, c_info in comps.items():
+                detail_records.append({
+                    "Dimensión": c_info["dimension"],
+                    "Grupo A": c_info["group_a"],
+                    "Grupo B": c_info["group_b"],
+                    "Razón de Disparidad": f"{c_info['disparity_ratio']:.3f}x",
+                    "Diferencia de Medias": f"{c_info['mean_difference']:+.2f}",
+                    "Welch t-stat": f"{c_info['welch_t_stat']:.3f}",
+                    "p-value (t-test)": f"{c_info['welch_t_pvalue']:.4f}",
+                    "Mann-Whitney p-value": f"{c_info['mann_whitney_pvalue']:.4f}",
+                    "Significancia (α=0.05)": "Sí (p < 0.05)" if c_info["is_statistically_significant"] else "No (p >= 0.05)"
+                })
+            st.dataframe(pd.DataFrame(detail_records), use_container_width=True)
+
     else:
         st.warning("No se encontraron resultados de auditoría previa. Ejecute `src/audit.py` para generar métricas.")

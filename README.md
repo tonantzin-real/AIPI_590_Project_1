@@ -16,10 +16,16 @@ This project investigates **Algorithmic Recourse** through Counterfactual Explan
 ---
 
 ## 🛠️ Project Architecture
-- `data/`: Dataset scripts and preprocessing pipeline (UCI Default of Credit Card Clients).
-- `src/`: Core machine learning, SHAP, and DiCE counterfactual recourse engines.
-- `app/`: Interactive Streamlit dashboard for applicants, loan officers, and regulators.
-- `notebooks/`: Exploratory data analysis, baseline model evaluation, and fairness audit experiments.
+- `data/`: Cached datasets (UCI Default of Credit Card Clients). Data ingestion and cleaning is handled by `src/data_loader.py`.
+- `models/`: Serialized model weights (`credit_model.joblib`), metadata, and audit results (`audit_disparity_results.json`, `audit_disparity_plot.png`).
+- `src/`: Core machine learning, SHAP, DiCE counterfactual recourse, and fairness auditing modules:
+  - `data_loader.py`: Ingestion, caching, and domain-grounded feature categorization.
+  - `train_model.py`: LightGBM classifier training and calibration.
+  - `xai_shap.py`: Global and local TreeSHAP attribution.
+  - `xai_recourse.py`: Actionable counterfactual recourse engine via Microsoft DiCE.
+  - `audit.py`: Out-of-sample demographic recourse disparity audit with hypothesis testing.
+- `app/`: Interactive Streamlit dashboard for applicants, risk analysts, and regulators.
+- `notebooks/`: Exploratory analysis, baseline model evaluation, and recourse experiments.
 
 ---
 

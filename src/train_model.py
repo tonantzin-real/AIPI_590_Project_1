@@ -4,10 +4,10 @@ MODULE: train_model.py
 PROJECT: AIPI 590 - Project 1: ¿Por qué me rechazaron?
 AUTHOR: Tonantzin Real Rojas
 DESCRIPTION:
-    Trains, evaluates, and serializes the baseline credit scoring classifier
-    using LightGBM and Random Forest. In credit risk underwriting, we prioritize
-    ROC-AUC and calibrated probabilities to balance credit approval rates with
-    default prevention.
+    Trains, evaluates, and serializes the champion credit scoring classifier
+    using LightGBM. In credit risk underwriting, we prioritize ROC-AUC and
+    calibrated probabilities to balance credit approval rates with default
+    prevention while enabling exact TreeSHAP computation.
 =============================================================================
 """
 
@@ -18,7 +18,6 @@ from typing import Dict, Any
 import numpy as np
 import pandas as pd
 from lightgbm import LGBMClassifier
-from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import (
     roc_auc_score,
     accuracy_score,
@@ -26,23 +25,32 @@ from sklearn.metrics import (
     recall_score,
     f1_score,
     classification_report,
-    confusion_matrix
+    confusion_matrix,
 )
 
 # Relative import within src or absolute import
 import sys
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from src.data_loader import get_train_test_data, IMMUTABLE_FEATURES, ACTIONABLE_FEATURES
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.append(BASE_DIR)
+from src.data_loader import (
+    get_train_test_data,
+    IMMUTABLE_FEATURES,
+    ACTIONABLE_FEATURES,
+    HISTORICAL_FEATURES,
+    INSTITUTIONAL_FEATURES
+)
+
+DEFAULT_MODEL_DIR = os.path.join(BASE_DIR, "models")
 
 
 def train_credit_models(
-    model_dir: str = "models",
+    model_dir: str = DEFAULT_MODEL_DIR,
     random_state: int = 42
 ) -> Dict[str, Any]:
     """
-    Trains baseline credit scoring models (LightGBM and Random Forest),
-    evaluates performance on an out-of-sample test set, and saves the
-    champion model and its training artifacts.
+    Trains the champion credit scoring model (LightGBM), evaluates
+    performance on an out-of-sample test set, and saves the champion
+    model and its training artifacts.
 
     Parameters:
         model_dir (str): Directory where trained models and metrics are saved.
@@ -57,9 +65,9 @@ def train_credit_models(
     X_train, X_test, y_train, y_test = get_train_test_data(random_state=random_state)
     feature_names = list(X_train.columns)
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("TRAINING CREDIT RISK UNDERWRITING MODELS")
-    print("="*60)
+    print("=" * 60)
 
     # 2. Configure LightGBM (Champion model: fast, non-linear, TreeSHAP compatible)
     # class_weight='balanced' addresses the default imbalance (~22% default rate)
@@ -72,7 +80,7 @@ def train_credit_models(
         colsample_bytree=0.8,
         class_weight="balanced",
         random_state=random_state,
-        verbose=-1
+        verbose=-1,
     )
 
     print("[train_model] Fitting LightGBM Classifier...")
@@ -81,7 +89,7 @@ def train_credit_models(
     # 3. Model Evaluation on Hold-out Test Set
     # Predict default probabilities: P(DEFAULT = 1)
     y_pred_proba = lgb_model.predict_proba(X_test)[:, 1]
-    
+
     # In fintech lending, a standard risk cutoff of 0.50 (or tailored threshold) is used
     threshold = 0.50
     y_pred = (y_pred_proba >= threshold).astype(int)
@@ -119,8 +127,8 @@ def train_credit_models(
             "precision": round(float(prec), 4),
             "recall": round(float(rec), 4),
             "f1": round(float(f1), 4),
-            "test_sample_size": int(len(y_test))
-        }
+            "test_sample_size": int(len(y_test)),
+        },
     }
 
     metadata_path = os.path.join(model_dir, "model_metadata.json")
