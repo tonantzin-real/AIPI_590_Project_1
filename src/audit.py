@@ -25,7 +25,7 @@ DESCRIPTION:
 import os
 import json
 import joblib
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 from scipy import stats
@@ -84,7 +84,7 @@ def holm_bonferroni_correction(p_values: List[float]) -> List[float]:
 
 
 def run_demographic_recourse_audit(
-    sample_per_group: int = 80,
+    sample_per_group: Optional[int] = None,
     model_path: str = DEFAULT_MODEL_PATH,
     output_dir: str = DEFAULT_OUTPUT_DIR,
     random_state: int = 42
@@ -94,7 +94,8 @@ def run_demographic_recourse_audit(
     on out-of-sample model-rejected applicants.
 
     Parameters:
-        sample_per_group (int): Number of rejected instances to evaluate per cohort.
+        sample_per_group (int, optional): Number of rejected instances to evaluate per cohort.
+            None (default) evaluates every model-rejected applicant in the test set.
         model_path (str): Path to trained credit classification model.
         output_dir (str): Directory where plots and JSON audit results are saved.
         random_state (int): Reproducibility seed.
@@ -129,7 +130,7 @@ def run_demographic_recourse_audit(
     print(f"Total Test Set Size:               {len(X_test)} applicants")
     print(f"Model Risk Cutoff Threshold:       {threshold:.2f}")
     print(f"Model-Predicted Denials in Test:   {len(rejected_test_df)} ({len(rejected_test_df)/len(X_test):.1%})")
-    print(f"Sample Evaluated per Subgroup:     {sample_per_group} applicants")
+    print(f"Sample Evaluated per Subgroup:     {'all rejected applicants' if sample_per_group is None else sample_per_group}")
     print("=" * 65)
 
     engine = CreditRecourseEngine(model_path=model_path, random_state=random_state)
@@ -146,30 +147,47 @@ def run_demographic_recourse_audit(
         "Single": rejected_test_df[rejected_test_df["MARRIAGE"] == 2],
     }
 
+    # 5. Select applicants per group (full pool by default) and compute each applicant's recourse ONCE.
+    #    An applicant belongs to up to 4 groups (one per dimension), so results are cached and reused.
+    group_samples = {
+        group_name: (
+            group_data if sample_per_group is None
+            else group_data.sample(min(sample_per_group, len(group_data)), random_state=random_state)
+        )
+        for group_name, group_data in demographic_groups.items()
+    }
+    applicants_to_evaluate = sorted(set().union(*(g.index for g in group_samples.values())))
+    print(f"\n[audit] Computing recourse for {len(applicants_to_evaluate)} unique rejected applicants...")
+
+    # Each entry: ("feasible", burden) | ("infeasible", None) | ("error", None)
+    recourse_results: Dict[Any, Tuple[str, Optional[float]]] = {}
+    for i, idx in enumerate(applicants_to_evaluate, start=1):
+        instance_df = rejected_test_df.loc[[idx]]
+        try:
+            _, deltas, mean_b = engine.generate_recourse_plans(
+                instance_df, total_cfs=1, random_seed=random_state, raise_errors=True
+            )
+            if not deltas.empty and mean_b > 0:
+                recourse_results[idx] = ("feasible", float(mean_b))
+            else:
+                recourse_results[idx] = ("infeasible", None)
+        except Exception as e:
+            # Genuine failures (not "no counterfactual exists") are tracked separately from infeasibility
+            print(f"  [audit] Unexpected error for applicant {idx}: {e}")
+            recourse_results[idx] = ("error", None)
+        if i % 100 == 0 or i == len(applicants_to_evaluate):
+            print(f"  [audit] Progress: {i}/{len(applicants_to_evaluate)} applicants")
+
     group_results = {}
     group_burdens = {}
 
-    for group_name, group_data in demographic_groups.items():
-        print(f"\n[audit] Evaluating: {group_name} (Pool: {len(group_data)} rejected applicants)...")
-        sample = group_data.sample(min(sample_per_group, len(group_data)), random_state=random_state)
-
-        burdens = []
-        cfs_found_count = 0
-        unexpected_errors_count = 0
-
-        for idx, row in sample.iterrows():
-            instance_df = pd.DataFrame([row])
-            try:
-                _, deltas, mean_b = engine.generate_recourse_plans(
-                    instance_df, total_cfs=1, random_seed=random_state, raise_errors=True
-                )
-                if not deltas.empty and mean_b > 0:
-                    burdens.append(mean_b)
-                    cfs_found_count += 1
-            except Exception as e:
-                # Genuine failures (not "no counterfactual exists") are tracked separately from infeasibility
-                print(f"  [audit] Unexpected error for applicant {idx}: {e}")
-                unexpected_errors_count += 1
+    for group_name, sample in group_samples.items():
+        pool_size = len(demographic_groups[group_name])
+        print(f"\n[audit] Group: {group_name} (Pool: {pool_size} rejected applicants, evaluated: {len(sample)})")
+        outcomes = [recourse_results[idx] for idx in sample.index]
+        burdens = [b for status, b in outcomes if status == "feasible"]
+        cfs_found_count = len(burdens)
+        unexpected_errors_count = sum(1 for status, _ in outcomes if status == "error")
 
         # Feasibility is computed over applicants that were evaluated without unexpected errors
         valid_evaluations = len(sample) - unexpected_errors_count
@@ -181,7 +199,7 @@ def run_demographic_recourse_audit(
         group_burdens[group_name] = burdens
         group_results[group_name] = {
             "group": group_name,
-            "pool_size": int(len(group_data)),
+            "pool_size": int(pool_size),
             "evaluated_n": int(len(sample)),
             "successful_recourse_n": int(cfs_found_count),
             "infeasible_recourse_n": int(valid_evaluations - cfs_found_count),
@@ -196,7 +214,7 @@ def run_demographic_recourse_audit(
         print(f"  -> Feasibility Rate: {feasibility_rate:.1f}% ({cfs_found_count}/{len(sample)})")
         print(f"  -> Conditional Burden: {mean_b:.2f} (95% CI: [{ci_lower:.2f}, {ci_upper:.2f}])")
 
-    # 5. Perform Formal Statistical Hypothesis Testing between Pairs
+    # 6. Perform Formal Statistical Hypothesis Testing between Pairs
     pairs = [
         ("Gender", "Female", "Male", "Female / Male"),
         ("Age", "Under 30", "30 and older", "Under 30 / 30 and older"),
@@ -298,12 +316,13 @@ def run_demographic_recourse_audit(
 
         dimension_comparisons[dim_key] = c
 
-    # 6. Overall Feasibility & Audit Summary
-    all_evaluated = sum(g["evaluated_n"] - g["unexpected_error_n"] for g in group_results.values())
-    all_successful = sum(g["successful_recourse_n"] for g in group_results.values())
+    # 7. Overall Feasibility & Audit Summary (each unique applicant counted once, not once per dimension)
+    all_burdens = [b for status, b in recourse_results.values() if status == "feasible"]
+    all_errors = sum(1 for status, _ in recourse_results.values() if status == "error")
+    all_evaluated = len(recourse_results) - all_errors
+    all_successful = len(all_burdens)
     overall_feasibility = round((all_successful / all_evaluated) * 100.0, 1) if all_evaluated > 0 else 0.0
 
-    all_burdens = [b for b_list in group_burdens.values() for b in b_list]
     overall_mean, ov_ci_l, ov_ci_u = compute_ci(all_burdens) if all_burdens else (0.0, 0.0, 0.0)
 
     audit_summary = {
@@ -311,7 +330,8 @@ def run_demographic_recourse_audit(
             "test_sample_size": int(len(X_test)),
             "model_rejected_sample_size": int(len(rejected_test_df)),
             "threshold": threshold,
-            "sample_per_group": sample_per_group,
+            "sample_per_group": "all" if sample_per_group is None else sample_per_group,
+            "unique_applicants_evaluated": int(len(recourse_results)),
             "actionable_features": ACTIONABLE_FEATURES,
             "immutable_features": IMMUTABLE_FEATURES,
             "historical_features": HISTORICAL_FEATURES,
@@ -323,6 +343,7 @@ def run_demographic_recourse_audit(
             ]
         },
         "overall": {
+            "unexpected_error_total": int(all_errors),
             "evaluated_total": all_evaluated,
             "successful_total": all_successful,
             "feasibility_rate_pct": overall_feasibility,
@@ -334,13 +355,13 @@ def run_demographic_recourse_audit(
         "comparisons": dimension_comparisons
     }
 
-    # 7. Save Structured JSON Output
+    # 8. Save Structured JSON Output
     json_path = os.path.join(output_dir, "audit_disparity_results.json")
     with open(json_path, "w") as f:
         json.dump(audit_summary, f, indent=4)
     print(f"\n[audit] Audit results successfully saved to: {json_path}")
 
-    # 8. Generate Publication-Quality Figure with 95% Confidence Intervals
+    # 9. Generate Publication-Quality Figure with 95% Confidence Intervals
     plot_data = []
     for g_name, g_info in group_results.items():
         plot_data.append({
@@ -425,7 +446,7 @@ def run_demographic_recourse_audit(
 
 
 if __name__ == "__main__":
-    summary = run_demographic_recourse_audit(sample_per_group=80)
+    summary = run_demographic_recourse_audit()
     print("\n--- AUDIT HYPOTHESIS TESTING SUMMARY (WITH HOLM-BONFERRONI CORRECTION) ---")
     for dim, comp in summary["comparisons"].items():
         print(f"\nDimension: {comp['dimension'].upper()}")

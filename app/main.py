@@ -538,10 +538,15 @@ with tab3:
             sub_sec = subgroups.get("High school / Other", {})
             sub_yng = subgroups.get("Under 30", {})
             sub_old = subgroups.get("30 and older", {})
+            sub_male = subgroups.get("Male", {})
+            sub_female = subgroups.get("Female", {})
+            sub_married = subgroups.get("Married", {})
+            sub_single = subgroups.get("Single", {})
             
             st.markdown(f"""
             1. **Gender ({DIMENSION_LABELS['gender'][1]}: {g_comp['disparity_ratio']:.3f}x):**  
-               {burden_sentence(g_comp)}
+               {burden_sentence(g_comp)}  
+               *Feasibility:* {sub_female.get('feasibility_rate_pct', 0.0):.1f}% for female vs. {sub_male.get('feasibility_rate_pct', 0.0):.1f}% for male applicants ({feasibility_sentence(g_comp)}).
             2. **Age ({DIMENSION_LABELS['age'][1]}: {a_comp['disparity_ratio']:.3f}x):**  
                {burden_sentence(a_comp)}  
                *Feasibility:* {sub_yng.get('feasibility_rate_pct', 0.0):.1f}% for applicants under 30 vs. {sub_old.get('feasibility_rate_pct', 0.0):.1f}% for applicants 30 and older ({feasibility_sentence(a_comp)}).
@@ -549,7 +554,8 @@ with tab3:
                {burden_sentence(e_comp)}  
                *Feasibility:* {sub_high.get('feasibility_rate_pct', 0.0):.1f}% for graduate/university vs. {sub_sec.get('feasibility_rate_pct', 0.0):.1f}% for high school/other ({feasibility_sentence(e_comp)}).
             4. **Marital status ({DIMENSION_LABELS['marriage'][1]}: {m_comp['disparity_ratio']:.3f}x):**  
-               {burden_sentence(m_comp)}
+               {burden_sentence(m_comp)}  
+               *Feasibility:* {sub_single.get('feasibility_rate_pct', 0.0):.1f}% for single vs. {sub_married.get('feasibility_rate_pct', 0.0):.1f}% for married applicants ({feasibility_sentence(m_comp)}).
             5. **Survivorship bias and multiple-testing control:**  
                Conditional burden only covers applicants with a feasible plan ({overall['feasibility_rate_pct']:.1f}% overall). Feasibility is therefore audited separately with Fisher's exact test, and Holm-Bonferroni corrections control the family-wise error rate (both per family of 4 tests and globally across all 8 tests).
             """)
