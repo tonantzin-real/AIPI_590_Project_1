@@ -14,7 +14,7 @@ data/*.csv
 data/*.xls*
 models/*.pkl
 models/*.joblib
-models/*.json
+!models/*.json
 
 # Streamlit
 .streamlit/secrets.toml

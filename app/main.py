@@ -367,18 +367,18 @@ with tab3:
                 delta=f"{(ratio_g - 1.0):+.1%} vs Paridad (1.00x)",
                 delta_color="inverse" if g_comp["is_burden_statistically_significant"] else "off"
             )
-            st.caption(f"Welch t-test: p = {g_comp['welch_t_pvalue']:.3f} ({'Significativo (p < 0.05)' if g_comp['is_burden_statistically_significant'] else 'Sin diferencia significativa (p >= 0.05)'})")
+            st.caption(f"Welch t-test: p = {g_comp['welch_t_pvalue']:.3f} (p_adj = {g_comp['welch_t_pvalue_holm_adjusted']:.3f}) | {'Significativo' if g_comp['is_burden_statistically_significant'] else 'Sin diferencia significativa'}")
 
         with col_a:
             a_comp = comps["age"]
             ratio_a = a_comp["disparity_ratio"]
             st.metric(
-                "Edad (Jóvenes / Mayores):",
+                "Edad (Jóvenes / Adultos 30+):",
                 f"{ratio_a:.3f}x",
                 delta=f"{(ratio_a - 1.0):+.1%} vs Paridad (1.00x)",
                 delta_color="inverse" if a_comp["is_burden_statistically_significant"] else "off"
             )
-            st.caption(f"Welch t-test: p = {a_comp['welch_t_pvalue']:.3f} ({'Significativo (p < 0.05)' if a_comp['is_burden_statistically_significant'] else 'Sin diferencia significativa (p >= 0.05)'})")
+            st.caption(f"Welch t-test: p = {a_comp['welch_t_pvalue']:.3f} (p_adj = {a_comp['welch_t_pvalue_holm_adjusted']:.3f}) | {'Significativo' if a_comp['is_burden_statistically_significant'] else 'Sin diferencia significativa'}")
 
         with col_e:
             e_comp = comps["education"]
@@ -389,7 +389,7 @@ with tab3:
                 delta=f"{(ratio_e - 1.0):+.1%} vs Paridad (1.00x)",
                 delta_color="inverse" if e_comp["is_burden_statistically_significant"] else "off"
             )
-            st.caption(f"Welch t-test: p = {e_comp['welch_t_pvalue']:.3f} ({'Significativo (p < 0.05)' if e_comp['is_burden_statistically_significant'] else 'Sin diferencia significativa (p >= 0.05)'})")
+            st.caption(f"Welch t-test: p = {e_comp['welch_t_pvalue']:.3f} (p_adj = {e_comp['welch_t_pvalue_holm_adjusted']:.3f}) | {'Significativo' if e_comp['is_burden_statistically_significant'] else 'Sin diferencia significativa'}")
 
         with col_m:
             m_comp = comps["marriage"]
@@ -400,7 +400,14 @@ with tab3:
                 delta=f"{(ratio_m - 1.0):+.1%} vs Paridad (1.00x)",
                 delta_color="inverse" if m_comp["is_burden_statistically_significant"] else "off"
             )
-            st.caption(f"Welch t-test: p = {m_comp['welch_t_pvalue']:.3f} ({'Significativo (p < 0.05)' if m_comp['is_burden_statistically_significant'] else 'Sin diferencia significativa (p >= 0.05)'})")
+            st.caption(f"Welch t-test: p = {m_comp['welch_t_pvalue']:.3f} (p_adj = {m_comp['welch_t_pvalue_holm_adjusted']:.3f}) | {'Significativo' if m_comp['is_burden_statistically_significant'] else 'Sin diferencia significativa'}")
+
+        st.info(
+            "⚠️ **Aviso Metodológico sobre Sesgo de Supervivencia:** Una razón de carga condicional inferior a 1.00x "
+            "**no** debe interpretarse como menor esfuerzo si va acompañada de una menor tasa de factibilidad. "
+            "El esfuerzo se calcula exclusivamente sobre solicitantes que logran obtener un plan viable dentro de las restricciones; "
+            "los perfiles en mayor estrés financiero son descartados como inviables, lo que puede subestimar la carga media de dichos grupos."
+        )
 
         st.markdown("---")
 
@@ -428,24 +435,24 @@ with tab3:
         with col_recs:
             st.markdown("#### 🏛️ Conclusiones y Recomendaciones Regulatorias (CONDUSEF & Ley Fintech)")
             
-            sub_high = subgroups["Higher Ed (Grad/Univ)"]
-            sub_sec = subgroups["Secondary / Other"]
-            sub_yng = subgroups["Young (< 30)"]
-            sub_old = subgroups["Older (>= 30)"]
+            sub_high = subgroups.get("Higher Ed (Grad/Univ)", {})
+            sub_sec = subgroups.get("Secondary / Other", {})
+            sub_yng = subgroups.get("Young (< 30)", {})
+            sub_old = subgroups.get("Adultos (≥ 30)", subgroups.get("Older (>= 30)", {}))
             
             st.markdown(f"""
             1. **Dimensión de Género ({g_comp['ratio_label']}: {g_comp['disparity_ratio']:.3f}x):**  
                {g_comp['burden_conclusion']}
             2. **Dimensión de Edad ({a_comp['ratio_label']}: {a_comp['disparity_ratio']:.3f}x):**  
                {a_comp['burden_conclusion']}  
-               *Factibilidad:* {sub_yng['feasibility_rate_pct']:.1f}% en jóvenes vs. {sub_old['feasibility_rate_pct']:.1f}% en adultos mayores ({a_comp['feasibility_conclusion']}).
+               *Factibilidad:* {sub_yng.get('feasibility_rate_pct', 0.0):.1f}% en jóvenes vs. {sub_old.get('feasibility_rate_pct', 0.0):.1f}% en adultos de 30+ ({a_comp['feasibility_conclusion']}).
             3. **Dimensión Educativa ({e_comp['ratio_label']}: {e_comp['disparity_ratio']:.3f}x):**  
                {e_comp['burden_conclusion']}  
-               *Factibilidad:* {sub_high['feasibility_rate_pct']:.1f}% en educación superior vs. {sub_sec['feasibility_rate_pct']:.1f}% en educación media ({e_comp['feasibility_conclusion']}).
+               *Factibilidad:* {sub_high.get('feasibility_rate_pct', 0.0):.1f}% en educación superior vs. {sub_sec.get('feasibility_rate_pct', 0.0):.1f}% en educación media ({e_comp['feasibility_conclusion']}).
             4. **Dimensión de Estado Civil ({m_comp['ratio_label']}: {m_comp['disparity_ratio']:.3f}x):**  
                {m_comp['burden_conclusion']}
             5. **Control de Sesgo de Supervivencia y Corrección Múltiple:**  
-               La carga condicional solo evalúa casos con solución factible ({overall['feasibility_rate_pct']:.1f}% global). Por ello, se audita simultáneamente la factibilidad mediante la prueba exacta de Fisher y se reportan correcciones Holm-Bonferroni para controlar la tasa de error por familia.
+               La carga condicional solo evalúa casos con solución factible ({overall['feasibility_rate_pct']:.1f}% global). Por ello, se audita simultáneamente la factibilidad mediante la prueba exacta de Fisher y se reportan correcciones Holm-Bonferroni para controlar la tasa de error por familia (tanto a nivel dominio de 4 pruebas como global de 8 pruebas).
             """)
 
         # Statistical Testing Detail Expander
@@ -455,15 +462,16 @@ with tab3:
             for dim_key, c_info in comps.items():
                 detail_records.append({
                     "Dimensión": c_info["dimension"],
-                    "Grupo A vs Grupo B": f"{c_info['group_a']} vs {c_info['group_b']}",
+                    "Comparación": f"{c_info['group_a']} vs {c_info['group_b']}",
                     "Razón Carga": f"{c_info['disparity_ratio']:.3f}x",
-                    "Welch t (p raw)": f"{c_info['welch_t_pvalue']:.4f}",
-                    "Welch p (Holm adj)": f"{c_info['welch_t_pvalue_holm_adjusted']:.4f}",
-                    "Mann-Whitney p": f"{c_info['mann_whitney_pvalue']:.4f}",
+                    "Welch p (raw)": f"{c_info['welch_t_pvalue']:.4f}",
+                    "Welch p (Holm 4-tests)": f"{c_info['welch_t_pvalue_holm_adjusted']:.4f}",
+                    "Welch p (Holm global 8-tests)": f"{c_info.get('welch_t_pvalue_holm_global_8tests', c_info['welch_t_pvalue_holm_adjusted']):.4f}",
                     "Brecha Factibilidad": f"{c_info['feasibility_gap_pct']:+.1f}%",
-                    "Fisher Exact p (raw)": f"{c_info['fisher_feasibility_pvalue']:.4f}",
-                    "Fisher p (Holm adj)": f"{c_info['fisher_pvalue_holm_adjusted']:.4f}",
-                    "Significativo (α=0.05)": "Sí (p_adj < 0.05)" if (c_info["is_burden_statistically_significant"] or c_info["is_feasibility_statistically_significant"]) else "No (p >= 0.05)"
+                    "Fisher p (raw)": f"{c_info['fisher_feasibility_pvalue']:.4f}",
+                    "Fisher p (Holm 4-tests)": f"{c_info['fisher_pvalue_holm_adjusted']:.4f}",
+                    "Fisher p (Holm global 8-tests)": f"{c_info.get('fisher_pvalue_holm_global_8tests', c_info['fisher_pvalue_holm_adjusted']):.4f}",
+                    "Significativo (p_adj < 0.05)": "Sí (p_adj < 0.05)" if (c_info["is_burden_statistically_significant"] or c_info["is_feasibility_statistically_significant"]) else "No (p >= 0.05)"
                 })
             st.dataframe(pd.DataFrame(detail_records), use_container_width=True)
 

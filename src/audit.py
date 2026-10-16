@@ -139,7 +139,7 @@ def run_demographic_recourse_audit(
         "Male (Hombre)": rejected_test_df[rejected_test_df["SEX"] == 1],
         "Female (Mujer)": rejected_test_df[rejected_test_df["SEX"] == 2],
         "Young (< 30)": rejected_test_df[rejected_test_df["AGE"] < 30],
-        "Older (>= 30)": rejected_test_df[rejected_test_df["AGE"] >= 30],
+        "Adultos (≥ 30)": rejected_test_df[rejected_test_df["AGE"] >= 30],
         "Higher Ed (Grad/Univ)": rejected_test_df[rejected_test_df["EDUCATION"].isin([1, 2])],
         "Secondary / Other": rejected_test_df[rejected_test_df["EDUCATION"].isin([3, 4])],
         "Married (Casado/a)": rejected_test_df[rejected_test_df["MARRIAGE"] == 1],
@@ -155,13 +155,17 @@ def run_demographic_recourse_audit(
 
         burdens = []
         cfs_found_count = 0
+        unexpected_errors_count = 0
 
         for idx, row in sample.iterrows():
             instance_df = pd.DataFrame([row])
-            _, deltas, mean_b = engine.generate_recourse_plans(instance_df, total_cfs=1, random_seed=random_state)
-            if not deltas.empty and mean_b > 0:
-                burdens.append(mean_b)
-                cfs_found_count += 1
+            try:
+                _, deltas, mean_b = engine.generate_recourse_plans(instance_df, total_cfs=1, random_seed=random_state)
+                if not deltas.empty and mean_b > 0:
+                    burdens.append(mean_b)
+                    cfs_found_count += 1
+            except Exception as e:
+                unexpected_errors_count += 1
 
         feasibility_rate = (cfs_found_count / len(sample)) * 100.0
         mean_b, ci_lower, ci_upper = compute_ci(burdens) if burdens else (0.0, 0.0, 0.0)
@@ -175,6 +179,7 @@ def run_demographic_recourse_audit(
             "evaluated_n": int(len(sample)),
             "successful_recourse_n": int(cfs_found_count),
             "infeasible_recourse_n": int(len(sample) - cfs_found_count),
+            "unexpected_error_n": int(unexpected_errors_count),
             "feasibility_rate_pct": round(feasibility_rate, 1),
             "mean_burden": mean_b,
             "ci_95_lower": ci_lower,
@@ -187,10 +192,10 @@ def run_demographic_recourse_audit(
 
     # 5. Perform Formal Statistical Hypothesis Testing between Pairs
     pairs = [
-        ("Gender", "Female (Mujer)", "Male (Hombre)", "Female / Male"),
-        ("Age", "Young (< 30)", "Older (>= 30)", "Young / Older"),
-        ("Education", "Secondary / Other", "Higher Ed (Grad/Univ)", "Secondary / Higher"),
-        ("Marriage", "Single (Soltero/a)", "Married (Casado/a)", "Single / Married"),
+        ("Gender", "Female (Mujer)", "Male (Hombre)", "Mujer / Hombre"),
+        ("Age", "Young (< 30)", "Adultos (≥ 30)", "Jóvenes / Adultos (30+)"),
+        ("Education", "Secondary / Other", "Higher Ed (Grad/Univ)", "Media / Superior"),
+        ("Marriage", "Single (Soltero/a)", "Married (Casado/a)", "Soltero / Casado"),
     ]
 
     raw_comps = []
@@ -237,37 +242,50 @@ def run_demographic_recourse_audit(
             "fisher_feasibility_pvalue": round(float(f_pval), 4),
         })
 
-    # Apply Holm-Bonferroni correction across the 4 tests
-    welch_pvals_adj = holm_bonferroni_correction(welch_pvals)
-    fisher_pvals_adj = holm_bonferroni_correction(fisher_pvals)
+    # Domain-specific Holm correction (4 tests each for burden and feasibility)
+    welch_pvals_adj_domain = holm_bonferroni_correction(welch_pvals)
+    fisher_pvals_adj_domain = holm_bonferroni_correction(fisher_pvals)
+
+    # Global experiment-wide Holm correction (all 8 tests jointly)
+    all_8_pvals = welch_pvals + fisher_pvals
+    all_8_adj = holm_bonferroni_correction(all_8_pvals)
+    welch_pvals_adj_global = all_8_adj[:len(welch_pvals)]
+    fisher_pvals_adj_global = all_8_adj[len(welch_pvals):]
 
     dimension_comparisons = {}
     for idx, c in enumerate(raw_comps):
         dim_key = c["dimension"].lower()
         t_pval = c["welch_t_pvalue"]
-        t_adj = welch_pvals_adj[idx]
-        f_pval = c["fisher_feasibility_pvalue"]
-        f_adj = fisher_pvals_adj[idx]
+        t_adj_domain = welch_pvals_adj_domain[idx]
+        t_adj_global = welch_pvals_adj_global[idx]
 
-        is_burden_sig = bool(t_pval < 0.05)
-        is_feasibility_sig = bool(f_pval < 0.05)
+        f_pval = c["fisher_feasibility_pvalue"]
+        f_adj_domain = fisher_pvals_adj_domain[idx]
+        f_adj_global = fisher_pvals_adj_global[idx]
+
+        # DECISION DRIVEN STRICTLY BY HOLM-ADJUSTED P-VALUE
+        is_burden_sig = bool(t_adj_domain < 0.05)
+        is_feasibility_sig = bool(f_adj_domain < 0.05)
 
         burden_conclusion = (
-            f"Diferencia estadísticamente significativa en carga (p = {t_pval:.4f}, p_adj = {t_adj:.4f} < 0.05)."
+            f"Diferencia estadísticamente significativa en carga (p = {t_pval:.4f}, p_adj = {t_adj_domain:.4f} < 0.05)."
             if is_burden_sig else
-            f"Sin evidencia de disparidad en carga algorítmica (p = {t_pval:.4f}, p_adj = {t_adj:.4f} >= 0.05); no se rechaza H0."
+            f"Sin evidencia de disparidad en carga algorítmica (p = {t_pval:.4f}, p_adj = {t_adj_domain:.4f} >= 0.05); no se rechaza H0."
         )
 
         feasibility_conclusion = (
-            f"Brecha de factibilidad estadísticamente significativa (p = {f_pval:.4f}, p_adj = {f_adj:.4f} < 0.05)."
+            f"Brecha de factibilidad estadísticamente significativa (p = {f_pval:.4f}, p_adj = {f_adj_domain:.4f} < 0.05)."
             if is_feasibility_sig else
-            f"Sin brecha estadísticamente significativa en factibilidad (p = {f_pval:.4f}, p_adj = {f_adj:.4f} >= 0.05)."
+            f"Sin brecha estadísticamente significativa en factibilidad (p = {f_pval:.4f}, p_adj = {f_adj_domain:.4f} >= 0.05)."
         )
 
-        c["welch_t_pvalue_holm_adjusted"] = t_adj
-        c["fisher_pvalue_holm_adjusted"] = f_adj
+        c["welch_t_pvalue_holm_adjusted"] = t_adj_domain
+        c["welch_t_pvalue_holm_global_8tests"] = t_adj_global
+        c["fisher_pvalue_holm_adjusted"] = f_adj_domain
+        c["fisher_pvalue_holm_global_8tests"] = f_adj_global
         c["is_burden_statistically_significant"] = is_burden_sig
         c["is_feasibility_statistically_significant"] = is_feasibility_sig
+        c["is_statistically_significant"] = bool(is_burden_sig or is_feasibility_sig)
         c["burden_conclusion"] = burden_conclusion
         c["feasibility_conclusion"] = feasibility_conclusion
         c["conclusion"] = f"{burden_conclusion} {feasibility_conclusion}"
@@ -293,9 +311,9 @@ def run_demographic_recourse_audit(
             "historical_features": HISTORICAL_FEATURES,
             "institutional_features": INSTITUTIONAL_FEATURES,
             "methodology_notes": [
-                "Algorithmic burden is evaluated conditionally on applicants who achieve feasible recourse within constraints.",
-                "To account for potential survivorship bias where harder instances are dropped, recourse feasibility rates are independently audited via Fisher's Exact Test.",
-                "Holm-Bonferroni step-down corrections are reported to control family-wise error rate across multiple demographic hypotheses."
+                "Algorithmic burden is evaluated conditionally on applicants who achieve feasible recourse within strict constraints (PAY_1 <= min(0, current), BILL_AMT1 <= current, PAY_AMT1 <= plan bill).",
+                "SURVIVORSHIP BIAS WARNING: Conditional burden ratios below 1.00x should NOT be interpreted as lighter burden if accompanied by lower feasibility. Groups with the most financially distressed applicants see harder cases dropped as infeasible, which can artificially depress conditional burden.",
+                "HYPOTHESIS TESTING ARCHITECTURE: We report both (1) domain-specific 4-test Holm-Bonferroni corrections (treating conditional burden and feasibility as two distinct 4-hypothesis families) and (2) global experiment-wide 8-test Holm-Bonferroni corrections covering all simultaneous tests. Significance decisions are strictly governed by adjusted p-values."
             ]
         },
         "overall": {

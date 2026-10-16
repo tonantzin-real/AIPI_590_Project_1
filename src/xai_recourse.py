@@ -146,7 +146,7 @@ class CreditRecourseEngine:
         try:
             dice_exp = self.exp.generate_counterfactuals(
                 query_instance,
-                total_CFs=total_cfs,
+                total_CFs=max(total_cfs * 2, 2),
                 desired_class=0,
                 features_to_vary=features_to_vary,
                 permitted_range=permitted_range if permitted_range else None,
@@ -165,6 +165,17 @@ class CreditRecourseEngine:
 
         if cf_df is None or len(cf_df) == 0:
             return pd.DataFrame(), pd.DataFrame(), 0.0
+
+        # Post-generation consistency check:
+        # Ensure PAY_AMT1 does not exceed the plan's own lower BILL_AMT1 (accounting coherence)
+        if "PAY_AMT1" in cf_df.columns and "BILL_AMT1" in cf_df.columns:
+            valid_mask = cf_df["PAY_AMT1"] <= (cf_df["BILL_AMT1"] + 1e-4)
+            cf_df = cf_df[valid_mask].copy()
+
+        if cf_df.empty:
+            return pd.DataFrame(), pd.DataFrame(), 0.0
+
+        cf_df = cf_df.head(total_cfs).reset_index(drop=True)
 
         # Calculate deltas (what specifically needs to change)
         delta_records = []
