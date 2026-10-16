@@ -160,14 +160,20 @@ def run_demographic_recourse_audit(
         for idx, row in sample.iterrows():
             instance_df = pd.DataFrame([row])
             try:
-                _, deltas, mean_b = engine.generate_recourse_plans(instance_df, total_cfs=1, random_seed=random_state)
+                _, deltas, mean_b = engine.generate_recourse_plans(
+                    instance_df, total_cfs=1, random_seed=random_state, raise_errors=True
+                )
                 if not deltas.empty and mean_b > 0:
                     burdens.append(mean_b)
                     cfs_found_count += 1
             except Exception as e:
+                # Genuine failures (not "no counterfactual exists") are tracked separately from infeasibility
+                print(f"  [audit] Unexpected error for applicant {idx}: {e}")
                 unexpected_errors_count += 1
 
-        feasibility_rate = (cfs_found_count / len(sample)) * 100.0
+        # Feasibility is computed over applicants that were evaluated without unexpected errors
+        valid_evaluations = len(sample) - unexpected_errors_count
+        feasibility_rate = (cfs_found_count / valid_evaluations) * 100.0 if valid_evaluations > 0 else 0.0
         mean_b, ci_lower, ci_upper = compute_ci(burdens) if burdens else (0.0, 0.0, 0.0)
         median_b = float(np.median(burdens)) if burdens else 0.0
         std_b = float(np.std(burdens, ddof=1)) if len(burdens) > 1 else 0.0
@@ -178,7 +184,7 @@ def run_demographic_recourse_audit(
             "pool_size": int(len(group_data)),
             "evaluated_n": int(len(sample)),
             "successful_recourse_n": int(cfs_found_count),
-            "infeasible_recourse_n": int(len(sample) - cfs_found_count),
+            "infeasible_recourse_n": int(valid_evaluations - cfs_found_count),
             "unexpected_error_n": int(unexpected_errors_count),
             "feasibility_rate_pct": round(feasibility_rate, 1),
             "mean_burden": mean_b,
@@ -293,7 +299,7 @@ def run_demographic_recourse_audit(
         dimension_comparisons[dim_key] = c
 
     # 6. Overall Feasibility & Audit Summary
-    all_evaluated = sum(g["evaluated_n"] for g in group_results.values())
+    all_evaluated = sum(g["evaluated_n"] - g["unexpected_error_n"] for g in group_results.values())
     all_successful = sum(g["successful_recourse_n"] for g in group_results.values())
     overall_feasibility = round((all_successful / all_evaluated) * 100.0, 1) if all_evaluated > 0 else 0.0
 
@@ -311,7 +317,7 @@ def run_demographic_recourse_audit(
             "historical_features": HISTORICAL_FEATURES,
             "institutional_features": INSTITUTIONAL_FEATURES,
             "methodology_notes": [
-                "Algorithmic burden is evaluated conditionally on applicants who achieve feasible recourse within strict constraints (PAY_1 <= min(0, current), BILL_AMT1 <= current, PAY_AMT1 <= plan bill).",
+                "Algorithmic burden is evaluated conditionally on applicants who achieve feasible recourse within strict constraints (PAY_1 <= min(0, current), BILL_AMT1 <= current, a PAY_AMT1 increase may not exceed the plan's own BILL_AMT1; the lowest-burden coherent plan is kept from a pool of 10 DiCE candidates).",
                 "SURVIVORSHIP BIAS WARNING: Conditional burden ratios below 1.00x should NOT be interpreted as lighter burden if accompanied by lower feasibility. Groups with the most financially distressed applicants see harder cases dropped as infeasible, which can artificially depress conditional burden.",
                 "HYPOTHESIS TESTING ARCHITECTURE: We report both (1) domain-specific 4-test Holm-Bonferroni corrections (treating conditional burden and feasibility as two distinct 4-hypothesis families) and (2) global experiment-wide 8-test Holm-Bonferroni corrections covering all simultaneous tests. Significance decisions are strictly governed by adjusted p-values."
             ]

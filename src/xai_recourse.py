@@ -97,7 +97,9 @@ class CreditRecourseEngine:
         query_instance: pd.DataFrame,
         total_cfs: int = 2,
         custom_features_to_vary: Optional[List[str]] = None,
-        random_seed: int = 42
+        random_seed: int = 42,
+        candidate_pool_size: int = 10,
+        raise_errors: bool = False
     ) -> Tuple[pd.DataFrame, pd.DataFrame, float]:
         """
         Generates actionable counterfactual paths to flip a rejection (DEFAULT=1)
@@ -109,6 +111,11 @@ class CreditRecourseEngine:
             total_cfs (int): Number of diverse counterfactual recommendations to generate.
             custom_features_to_vary (list, optional): Overrides mutable feature list if specified.
             random_seed (int): Seed for reproducible counterfactual generation.
+            candidate_pool_size (int): Number of DiCE candidates generated before the
+                bill-payment coherence filter is applied. A larger pool makes feasibility
+                depend less on the luck of the random search.
+            raise_errors (bool): If True, unexpected (non-"no counterfactual") errors are
+                re-raised so callers such as the audit can count them separately.
 
         Returns:
             cf_df (pd.DataFrame): The full counterfactual applicant profiles.
@@ -131,7 +138,8 @@ class CreditRecourseEngine:
         # Directional and realistic boundary constraints:
         # 1. PAY_1: Must stay the same or improve (<= min(0, current_pay1)). Cannot worsen (e.g. -2 to 0 is blocked).
         # 2. BILL_AMT1: Must pay down or maintain debt (0 to current bill), never increase debt.
-        # 3. PAY_AMT1: Tied to current bill. An applicant can pay from current payment up to paying off the full bill.
+        # 3. PAY_AMT1: Can stay the same or increase, up to paying off the full bill. Applicants who already
+        #    pay more than their bill keep their current payment as the cap (no increase is recommended).
         permitted_range = {}
         if "PAY_1" in features_to_vary:
             permitted_range["PAY_1"] = [-2, min(0, current_pay1)]
@@ -139,14 +147,14 @@ class CreditRecourseEngine:
             permitted_range["BILL_AMT1"] = [0.0, max(current_bill, 0.0)]
         if "PAY_AMT1" in features_to_vary:
             effective_bill = max(0.0, current_bill)
-            max_payment_cap = max(effective_bill, current_pay, 1000.0)
+            max_payment_cap = max(effective_bill, current_pay)
             permitted_range["PAY_AMT1"] = [float(current_pay), max_payment_cap]
 
         # Generate diverse counterfactuals targeting DEFAULT=0 (Approved)
         try:
             dice_exp = self.exp.generate_counterfactuals(
                 query_instance,
-                total_CFs=max(total_cfs * 2, 2),
+                total_CFs=max(total_cfs, candidate_pool_size),
                 desired_class=0,
                 features_to_vary=features_to_vary,
                 permitted_range=permitted_range if permitted_range else None,
@@ -158,7 +166,9 @@ class CreditRecourseEngine:
             # DiCE specifically raises UserConfigValidationException when no counterfactual exists within constraints
             return pd.DataFrame(), pd.DataFrame(), 0.0
         except Exception as e:
-            # Log unexpected errors while preserving pipeline execution
+            if raise_errors:
+                raise
+            # Log unexpected errors while preserving pipeline execution (e.g. in the Streamlit app)
             import warnings
             warnings.warn(f"[xai_recourse] Unexpected error generating counterfactuals: {e}")
             return pd.DataFrame(), pd.DataFrame(), 0.0
@@ -166,16 +176,34 @@ class CreditRecourseEngine:
         if cf_df is None or len(cf_df) == 0:
             return pd.DataFrame(), pd.DataFrame(), 0.0
 
-        # Post-generation consistency check:
-        # Ensure PAY_AMT1 does not exceed the plan's own lower BILL_AMT1 (accounting coherence)
+        # Post-generation consistency check (accounting coherence):
+        # A plan that INCREASES PAY_AMT1 must not pay more than the plan's own (possibly lowered) BILL_AMT1.
+        # Plans that keep the applicant's current payment are always coherent, even if that payment
+        # already exceeds the bill; otherwise those applicants would be automatically infeasible.
         if "PAY_AMT1" in cf_df.columns and "BILL_AMT1" in cf_df.columns:
-            valid_mask = cf_df["PAY_AMT1"] <= (cf_df["BILL_AMT1"] + 1e-4)
-            cf_df = cf_df[valid_mask].copy()
+            payment_unchanged = cf_df["PAY_AMT1"] <= (current_pay + 1e-4)
+            payment_within_bill = cf_df["PAY_AMT1"] <= (cf_df["BILL_AMT1"] + 1e-4)
+            cf_df = cf_df[payment_unchanged | payment_within_bill].copy()
 
         if cf_df.empty:
             return pd.DataFrame(), pd.DataFrame(), 0.0
 
-        cf_df = cf_df.head(total_cfs).reset_index(drop=True)
+        # Keep the lowest-burden valid plans from the candidate pool
+        def _plan_burden(cf_row: pd.Series) -> float:
+            burden = 0.0
+            for col in features_to_vary:
+                col_std = self.feature_stds.get(col, 1.0)
+                if col_std > 0:
+                    burden += abs(cf_row[col] - query_row[col]) / col_std
+            return burden
+
+        cf_df["_burden"] = cf_df.apply(_plan_burden, axis=1)
+        cf_df = (
+            cf_df.sort_values("_burden")
+            .drop(columns="_burden")
+            .head(total_cfs)
+            .reset_index(drop=True)
+        )
 
         # Calculate deltas (what specifically needs to change)
         delta_records = []

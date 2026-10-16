@@ -471,7 +471,7 @@ with tab3:
                     "Fisher p (raw)": f"{c_info['fisher_feasibility_pvalue']:.4f}",
                     "Fisher p (Holm 4-tests)": f"{c_info['fisher_pvalue_holm_adjusted']:.4f}",
                     "Fisher p (Holm global 8-tests)": f"{c_info.get('fisher_pvalue_holm_global_8tests', c_info['fisher_pvalue_holm_adjusted']):.4f}",
-                    "Significativo (p_adj < 0.05)": "Sí (p_adj < 0.05)" if (c_info["is_burden_statistically_significant"] or c_info["is_feasibility_statistically_significant"]) else "No (p >= 0.05)"
+                    "Significativo (p_adj < 0.05)": "Sí (p_adj < 0.05)" if (c_info["is_burden_statistically_significant"] or c_info["is_feasibility_statistically_significant"]) else "No (p_adj >= 0.05)"
                 })
             st.dataframe(pd.DataFrame(detail_records), use_container_width=True)
 
