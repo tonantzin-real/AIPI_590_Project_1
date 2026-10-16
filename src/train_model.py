@@ -1,7 +1,7 @@
 """
 =============================================================================
 MODULE: train_model.py
-PROJECT: AIPI 590 - Project 1: ¿Por qué me rechazaron?
+PROJECT: AIPI 590 - Project 1: Why Was I Rejected?
 AUTHOR: Tonantzin Real Rojas
 DESCRIPTION:
     Trains, evaluates, and serializes the champion credit scoring classifier

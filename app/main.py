@@ -1,7 +1,7 @@
 """
 =============================================================================
 APPLICATION: main.py (Streamlit Web Dashboard)
-PROJECT: AIPI 590 - Project 1: ¿Por qué me rechazaron?
+PROJECT: AIPI 590 - Project 1: Why Was I Rejected?
 AUTHOR: Tonantzin Real Rojas
 DESCRIPTION:
     Interactive portfolio artifact demonstrating Explainable AI, Algorithmic
@@ -24,10 +24,7 @@ import seaborn as sns
 import sys
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(BASE_DIR)
-from src.data_loader import (
-    CATEGORICAL_LABELS,
-    DEFAULT_DATA_PATH
-)
+from src.data_loader import CATEGORICAL_LABELS, DEFAULT_DATA_PATH
 from src.xai_shap import CreditSHAPExplainer
 from src.xai_recourse import CreditRecourseEngine
 
@@ -35,7 +32,7 @@ from src.xai_recourse import CreditRecourseEngine
 # PAGE CONFIGURATION & STYLING
 # ---------------------------------------------------------------------------
 st.set_page_config(
-    page_title="¿Por qué me rechazaron? | XAI Credit Recourse",
+    page_title="Why Was I Rejected? | XAI Credit Recourse",
     page_icon="💳",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -106,18 +103,95 @@ model, metadata, shap_explainer, recourse_engine = load_models_and_engines()
 
 
 # ---------------------------------------------------------------------------
+# HUMAN-READABLE FEATURE LABELS
+# ---------------------------------------------------------------------------
+MONTH_AGO = {1: "most recent month", 2: "2 months ago", 3: "3 months ago", 4: "4 months ago", 5: "5 months ago", 6: "6 months ago"}
+
+FEATURE_LABELS = {
+    "LIMIT_BAL": "Credit limit",
+    "SEX": "Sex",
+    "EDUCATION": "Education level",
+    "MARRIAGE": "Marital status",
+    "AGE": "Age",
+    **{f"PAY_{i}": f"Payment status, {MONTH_AGO[i]}" for i in range(1, 7)},
+    **{f"BILL_AMT{i}": f"Statement balance, {MONTH_AGO[i]}" for i in range(1, 7)},
+    **{f"PAY_AMT{i}": f"Amount paid, {MONTH_AGO[i]}" for i in range(1, 7)},
+}
+
+MONEY_FEATURES = {"LIMIT_BAL"} | {f"BILL_AMT{i}" for i in range(1, 7)} | {f"PAY_AMT{i}" for i in range(1, 7)}
+
+# Plain-language action for each actionable lever, depending on the direction of the change
+RECOURSE_ACTIONS = {
+    "PAY_1": {"down": "Improve your most recent payment status", "up": "Most recent payment status changes"},
+    "BILL_AMT1": {"down": "Reduce your current statement balance", "up": "Current statement balance increases"},
+    "PAY_AMT1": {"down": "Most recent payment decreases", "up": "Increase your most recent payment"},
+}
+
+
+def feature_label(feature: str) -> str:
+    """Returns 'Interpretation (FEATURE)' for display."""
+    return f"{FEATURE_LABELS.get(feature, feature)} ({feature})"
+
+
+def format_money(value: float) -> str:
+    return f"-${abs(value):,.0f}" if value < 0 else f"${value:,.0f}"
+
+
+def payment_status_label(code: float) -> str:
+    code = int(round(code))
+    if code == -2:
+        return "No card use / zero balance"
+    if code == -1:
+        return "Paid in full on time"
+    if code == 0:
+        return "Revolving credit (minimum payment made)"
+    return f"{code}-month payment delay"
+
+
+def describe_recourse_change(feature: str, old: float, new: float) -> dict:
+    """Builds a human-readable description of one recommended change."""
+    direction = "up" if new > old else "down"
+    action = RECOURSE_ACTIONS.get(feature, {}).get(direction, FEATURE_LABELS.get(feature, feature))
+    if feature.startswith("PAY_") and not feature.startswith("PAY_AMT"):
+        from_str, to_str = payment_status_label(old), payment_status_label(new)
+        steps = int(round(abs(new - old)))
+        diff_str = f"{steps} level{'s' if steps != 1 else ''} {'better' if new < old else 'worse'}"
+    elif feature in MONEY_FEATURES:
+        from_str, to_str = format_money(old), format_money(new)
+        diff_str = ("+" if new > old else "-") + f"${abs(new - old):,.0f}"
+    else:
+        from_str, to_str = f"{old:,.0f}", f"{new:,.0f}"
+        diff_str = f"{new - old:+,.0f}"
+    return {
+        "action": f"{action} ({feature})",
+        "from": from_str,
+        "to": to_str,
+        "difference": diff_str,
+    }
+
+
+def recourse_changes(original: pd.Series, cf_row: pd.Series) -> list:
+    """Lists the human-readable changes between the applicant and one counterfactual plan."""
+    changes = []
+    for feature in ["PAY_1", "BILL_AMT1", "PAY_AMT1"]:
+        if feature in cf_row and abs(float(cf_row[feature]) - float(original[feature])) > 0.01:
+            changes.append(describe_recourse_change(feature, float(original[feature]), float(cf_row[feature])))
+    return changes
+
+
+# ---------------------------------------------------------------------------
 # SIDEBAR CONTROLS & APPLICANT PROFILER
 # ---------------------------------------------------------------------------
 st.sidebar.image("https://img.icons8.com/fluency/96/bank-card-back-side.png", width=64)
-st.sidebar.markdown("### 👤 Perfil del Solicitante / Applicant Profile")
+st.sidebar.markdown("### 👤 Applicant Profile")
 st.sidebar.markdown("Configure loan applicant financial and demographic details:")
 
 preset = st.sidebar.selectbox(
-    "Cargar Perfil Predeterminado / Preset Profile:",
-    ["Solicitante en Riesgo (Rechazado)", "Solicitante Confiable (Aprobado)", "Personalizado / Custom"]
+    "Load a preset profile:",
+    ["High-risk applicant (rejected)", "Reliable applicant (approved)", "Custom"]
 )
 
-if preset == "Solicitante en Riesgo (Rechazado)":
+if preset == "High-risk applicant (rejected)":
     init_limit = 20000
     init_sex = 2  # Female
     init_edu = 2  # University
@@ -126,7 +200,7 @@ if preset == "Solicitante en Riesgo (Rechazado)":
     init_pay1 = 2  # 2 months delayed payment
     init_bill1 = 45000
     init_payamt1 = 500
-elif preset == "Solicitante Confiable (Aprobado)":
+elif preset == "Reliable applicant (approved)":
     init_limit = 150000
     init_sex = 1  # Male
     init_edu = 1  # Grad school
@@ -148,32 +222,25 @@ else:
 # Input Controls
 col_sb1, col_sb2 = st.sidebar.columns(2)
 with col_sb1:
-    sex = st.selectbox("Género / Sex:", [1, 2], index=0 if init_sex == 1 else 1, format_func=lambda x: CATEGORICAL_LABELS["SEX"][x])
-    marriage = st.selectbox("Estado Civil / Marital:", [1, 2, 3], index=init_mar - 1, format_func=lambda x: CATEGORICAL_LABELS["MARRIAGE"][x])
+    sex = st.selectbox("Sex (SEX):", [1, 2], index=0 if init_sex == 1 else 1, format_func=lambda x: CATEGORICAL_LABELS["SEX"][x])
+    marriage = st.selectbox("Marital status (MARRIAGE):", [1, 2, 3], index=init_mar - 1, format_func=lambda x: CATEGORICAL_LABELS["MARRIAGE"][x])
 with col_sb2:
-    age = st.slider("Edad / Age:", 18, 75, init_age)
-    education = st.selectbox("Educación / Education:", [1, 2, 3, 4], index=init_edu - 1, format_func=lambda x: CATEGORICAL_LABELS["EDUCATION"][x])
+    age = st.slider("Age (AGE):", 18, 75, init_age)
+    education = st.selectbox("Education level (EDUCATION):", [1, 2, 3, 4], index=init_edu - 1, format_func=lambda x: CATEGORICAL_LABELS["EDUCATION"][x])
 
-limit_bal = st.sidebar.number_input("Límite de Crédito Solicitado (MXN / NTD):", min_value=10000, max_value=800000, value=init_limit, step=10000)
+limit_bal = st.sidebar.number_input("Credit limit in $ (LIMIT_BAL):", min_value=10000, max_value=800000, value=init_limit, step=10000)
 
-st.sidebar.markdown("#### Historial y Balances Recientes")
+st.sidebar.markdown("#### Recent History and Balances")
 pay_1 = st.sidebar.selectbox(
-    "Estatus Pago Reciente (Mes 1):",
+    "Most recent payment status (PAY_1):",
     [-2, -1, 0, 1, 2, 3],
     index=[-2, -1, 0, 1, 2, 3].index(init_pay1),
-    format_func=lambda x: {
-        -2: "Sin consumo / saldo cero (-2)",
-        -1: "Pagado puntual íntegro (-1)",
-        0: "Uso crédito revolvente c/pago mínimo (0)",
-        1: "Retraso 1 mes (+1)",
-        2: "Retraso 2 meses (+2)",
-        3: "Retraso 3 meses (+3)"
-    }[x]
+    format_func=lambda x: f"{payment_status_label(x)} ({x:+d})" if x else f"{payment_status_label(x)} (0)"
 )
-st.sidebar.caption("ℹ️ *Nota de Dominio:* En la taxonomía UCI Credit, -2 y -1 representan cumplimiento superior o saldo liquidado, mientras que 0 indica financiamiento revolvente y valores positivos reflejan mora.")
+st.sidebar.caption("ℹ️ *Note:* In the UCI credit data, -2 and -1 mean the balance was paid off or paid on time, 0 means revolving credit with the minimum payment made, and positive values are months of payment delay.")
 
-bill_amt1 = st.sidebar.number_input("Saldo Facturado Reciente (MXN):", min_value=0, max_value=500000, value=init_bill1, step=2500)
-pay_amt1 = st.sidebar.number_input("Monto Pagado Reciente (MXN):", min_value=0, max_value=300000, value=init_payamt1, step=1000)
+bill_amt1 = st.sidebar.number_input("Current statement balance in $ (BILL_AMT1):", min_value=0, max_value=500000, value=init_bill1, step=2500)
+pay_amt1 = st.sidebar.number_input("Most recent amount paid in $ (PAY_AMT1):", min_value=0, max_value=300000, value=init_payamt1, step=1000)
 
 # Build Complete Feature Vector (23 features)
 sample_vector = {
@@ -204,25 +271,25 @@ applicant_df = pd.DataFrame([sample_vector])
 # ---------------------------------------------------------------------------
 # MAIN HEADER
 # ---------------------------------------------------------------------------
-st.markdown('<div class="main-header">¿Por qué me rechazaron?</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header">Why Was I Rejected?</div>', unsafe_allow_html=True)
 st.markdown(
-    '<div class="sub-header"><b>Auditoría de Explicabilidad, Recursos Accionables y Disparidad en Crédito al Consumo</b> | '
+    '<div class="sub-header"><b>Auditing Explainability, Actionable Recourse, and Burden Disparity in Consumer Credit</b> | '
     'AIPI 590: Explainable AI Final Project</div>',
     unsafe_allow_html=True
 )
 
 tab1, tab2, tab3 = st.tabs([
-    "💳 1. Simulador & Recurso Accionable",
-    "⚖️ 2. SHAP vs. DiCE (La Paradoja de XAI)",
-    "📊 3. Auditoría de Carga Algorítmica"
+    "💳 1. Simulator & Actionable Recourse",
+    "⚖️ 2. SHAP vs. DiCE (The XAI Paradox)",
+    "📊 3. Algorithmic Burden Audit"
 ])
 
 
 # ---------------------------------------------------------------------------
-# TAB 1: SIMULADOR & RECURSO ACCIONABLE
+# TAB 1: SIMULATOR & ACTIONABLE RECOURSE
 # ---------------------------------------------------------------------------
 with tab1:
-    st.subheader("Decisión Automatizada del Modelo de Crédito")
+    st.subheader("Automated Credit Model Decision")
 
     # Model inference
     proba_default = float(model.predict_proba(applicant_df)[:, 1][0])
@@ -231,37 +298,37 @@ with tab1:
 
     col_res1, col_res2, col_res3 = st.columns([1.5, 1.5, 3])
     with col_res1:
-        st.markdown("**Resultado:**")
+        st.markdown("**Result:**")
         if is_rejected:
-            st.markdown('<span class="badge-rejected">❌ SOLICITUD RECHAZADA (Riesgo Alto)</span>', unsafe_allow_html=True)
+            st.markdown('<span class="badge-rejected">❌ APPLICATION REJECTED (High Risk)</span>', unsafe_allow_html=True)
         else:
-            st.markdown('<span class="badge-approved">✅ SOLICITUD APROBADA (Confiable)</span>', unsafe_allow_html=True)
+            st.markdown('<span class="badge-approved">✅ APPLICATION APPROVED (Reliable)</span>', unsafe_allow_html=True)
 
     with col_res2:
         st.metric(
-            "Probabilidad de Incumplimiento:",
+            "Probability of Default:",
             f"{proba_default:.1%}",
-            delta=f"{(proba_default - threshold):+.1%} vs Umbral",
+            delta=f"{(proba_default - threshold):+.1%} vs. threshold",
             delta_color="inverse"
         )
 
     with col_res3:
         st.markdown(f"""
-        **Criterio Regulatorio:**
-        El umbral de riesgo de la institución es **{threshold:.0%}**. 
-        {f'El solicitante excede el límite de tolerancia de riesgo por {(proba_default - threshold):.1%}.' if is_rejected else 'El solicitante califica para la línea de crédito solicitada.'}
+        **Decision Rule:**
+        The lender's risk threshold is **{threshold:.0%}**. 
+        {f'This applicant exceeds the risk tolerance by {(proba_default - threshold):.1%}.' if is_rejected else 'This applicant qualifies for the requested credit line.'}
         """)
 
     st.markdown("---")
 
     if is_rejected:
-        st.markdown("### 🎯 Generador de Recursos Accionables (DiCE Counterfactuals)")
+        st.markdown("### 🎯 Actionable Recourse Plans (DiCE Counterfactuals)")
         st.markdown("""
-        Bajo el marco de **Protección al Consumidor Financiero (CONDUSEF / GDPR Art. 22)**, no basta con decir *por qué* se rechazó.
-        El solicitante tiene derecho a conocer **planes de acción mínimos y viables** para revertir la decisión.
+        Under consumer financial protection frameworks (**CONDUSEF / GDPR Art. 22**), it is not enough to explain *why* an application was rejected.
+        The applicant deserves **minimal, feasible action plans** to reverse the decision.
         """)
 
-        with st.spinner("Calculando rutas accionables bajo restricciones causales estrictas..."):
+        with st.spinner("Searching for actionable plans under strict constraints..."):
             cfs_df, deltas_df, mean_burden = recourse_engine.generate_recourse_plans(applicant_df, total_cfs=2)
 
         if not deltas_df.empty:
@@ -269,80 +336,112 @@ with tab1:
             for idx, row in deltas_df.iterrows():
                 col_target = col_plan1 if idx == 0 else col_plan2
                 with col_target:
-                    st.markdown(f"#### 📋 {row['Plan_ID']} (Esfuerzo Relativo: {row['Normalized_Burden']:.2f})")
-                    for col_name, val_str in row.items():
-                        if col_name not in ["Plan_ID", "Normalized_Burden"]:
-                            st.info(f"**{col_name}:** {val_str}")
-                    st.caption("🔒 *Atributos inmutables (Edad, Género, Educación, Estado Civil), historial previo y límites bancarios se mantuvieron estrictamente congelados.*")
+                    st.markdown(f"#### 📋 {row['Plan_ID']} (Relative effort: {row['Normalized_Burden']:.2f})")
+                    for change in recourse_changes(applicant_df.iloc[0], cfs_df.iloc[idx]):
+                        st.info(f"**{change['action']}:** {change['from']} ➔ {change['to']} ({change['difference']})")
+                    st.caption("🔒 *Personal traits (age, sex, education, marital status), past payment history, and the bank-set credit limit were kept fixed.*")
             
-            st.success(f"**Esfuerzo Algorítmico Promedio (Distancia L1 Condicional Normalizada):** {mean_burden:.2f}")
+            st.success(f"**Average algorithmic effort (normalized L1 distance):** {mean_burden:.2f}")
         else:
-            st.warning("No se encontró un contra factual viable dentro de los límites de un solo paso. Se requiere reestructuración integral de deuda a mediano plazo.")
+            st.warning("No feasible plan was found within a single step. This applicant would need broader, longer-term debt restructuring.")
     else:
         st.balloons()
-        st.success("¡Felicidades! Este perfil califica directamente para la aprobación de crédito.")
+        st.success("Congratulations! This profile qualifies for credit approval.")
 
 
 # ---------------------------------------------------------------------------
 # TAB 2: SHAP VS. DICE (THE EXPLAINABILITY PARADOX)
 # ---------------------------------------------------------------------------
 with tab2:
-    st.subheader("La Paradoja de XAI: Atribución Retrospectiva vs. Recurso Prescriptivo")
+    st.subheader("The XAI Paradox: Retrospective Attribution vs. Prescriptive Recourse")
     st.markdown("""
-    En la industria financiera, **SHAP** y **LIME** se utilizan comúnmente para explicar denegaciones de crédito. 
-    Sin embargo, esta comparativa ilustra por qué las atribuciones de características resultan insuficientes para el usuario.
+    In finance, **SHAP** and **LIME** are commonly used to explain credit denials. 
+    This comparison shows why feature attributions alone are not enough for the applicant.
     """)
 
     col_shap, col_dice = st.columns(2)
 
     with col_shap:
-        st.markdown("### 📉 Enfoque Tradicional: SHAP (Retrospectivo)")
-        st.caption("Responde a: *'¿Qué hiciste mal en el pasado?'* (Atribución estática)")
+        st.markdown("### 📉 Traditional Approach: SHAP (Retrospective)")
+        st.caption("Answers: *'What did you do wrong in the past?'* (static attribution)")
         shap_vals, base_val, summary_df = shap_explainer.explain_instance(applicant_df)
 
-        fig_shap, ax_shap = plt.subplots(figsize=(6, 4.5))
+        fig_shap, ax_shap = plt.subplots(figsize=(7, 4.5))
         top_shap = summary_df.head(6)
         colors = ["#ef4444" if v > 0 else "#22c55e" for v in top_shap["SHAP_Attribution"]]
-        ax_shap.barh(top_shap["Feature"], top_shap["SHAP_Attribution"], color=colors)
+        ax_shap.barh([feature_label(f) for f in top_shap["Feature"]], top_shap["SHAP_Attribution"], color=colors)
         ax_shap.axvline(0, color="gray", linestyle="--", linewidth=0.8)
-        ax_shap.set_xlabel("Impacto SHAP en Riesgo de Default")
+        ax_shap.set_xlabel("SHAP impact on default risk (red = raises risk, green = lowers risk)")
         ax_shap.invert_yaxis()
         plt.tight_layout()
         st.pyplot(fig_shap)
 
         st.markdown("""
-        **Limitaciones de SHAP para el Solicitante:**
-        - Solo describe la culpa (*"Tu saldo es alto y tu historial tiene retrasos"*).
-        - No especifica cuánto pagar ni qué meta concreta garantiza la aprobación.
-        - Frecuentemente resalta variables inmutables sobre las que el usuario no tiene control.
+        **Limitations of SHAP for the Applicant:**
+        - It only assigns blame (*"Your balance is high and your history shows delays"*).
+        - It does not say how much to pay or which concrete goal leads to approval.
+        - It often highlights traits the applicant cannot change.
         """)
 
     with col_dice:
-        st.markdown("### 🚀 Enfoque Responsable: DiCE (Prescriptivo)")
-        st.caption("Responde a: *'¿Qué acción mínima garantiza tu aprobación?'* (Recurso Accionable)")
+        st.markdown("### 🚀 Responsible Approach: DiCE (Prescriptive)")
+        st.caption("Answers: *'What is the smallest action that gets you approved?'* (actionable recourse)")
 
         if is_rejected and not deltas_df.empty:
-            st.dataframe(deltas_df, use_container_width=True)
+            plan_rows = []
+            for idx, row in deltas_df.iterrows():
+                for change in recourse_changes(applicant_df.iloc[0], cfs_df.iloc[idx]):
+                    plan_rows.append({
+                        "Plan": row["Plan_ID"],
+                        "Recommended change": change["action"],
+                        "From": change["from"],
+                        "To": change["to"],
+                        "Difference": change["difference"],
+                        "Relative effort": f"{row['Normalized_Burden']:.2f}",
+                    })
+            st.dataframe(pd.DataFrame(plan_rows), use_container_width=True, hide_index=True)
             st.markdown("""
-            **Ventajas Clave de DiCE / Algorithmic Recourse:**
-            - **Accionabilidad Estricta:** Solo modifica palancas financieras presentes (`PAY_1`, `BILL_AMT1`, `PAY_AMT1`).
-            - **No Discriminación:** Bloquea explícitamente variables protegidas (Género, Edad, Educación, Estado Civil).
-            - **Restricción Causal y Temporal:** No altera el historial crediticio pasado (`PAY_2..6`) ni límites fijados por el banco (`LIMIT_BAL`).
-            - **Restricciones Monótonas:** No permite empeorar el estatus de pago ni pagar más que el saldo facturado.
-            - **Minimización de Esfuerzo:** Identifica la ruta de menor fricción financiera ($L_1$ distance).
+            **Key Advantages of DiCE / Algorithmic Recourse:**
+            - **Strict actionability:** Only changes levers the applicant controls today: payment status (`PAY_1`), statement balance (`BILL_AMT1`), and amount paid (`PAY_AMT1`).
+            - **Non-discrimination:** Personal traits (sex, age, education, marital status) are locked.
+            - **Causal and temporal realism:** Past payment history (`PAY_2..6`) and the bank-set credit limit (`LIMIT_BAL`) are never changed.
+            - **Monotonic constraints:** A plan can never worsen payment status or pay more than the statement balance.
+            - **Minimal effort:** Picks the lowest-friction path ($L_1$ distance).
             """)
         else:
-            st.info("Para visualizar la comparativa de recursos accionables, seleccione un perfil en riesgo en la barra lateral.")
+            st.info("To see the recourse comparison, select a high-risk profile in the sidebar.")
 
 
 # ---------------------------------------------------------------------------
-# TAB 3: AUDITORÍA DE CARGA ALGORÍTMICA (REGULATORY AUDIT)
+# TAB 3: ALGORITHMIC BURDEN AUDIT (REGULATORY AUDIT)
 # ---------------------------------------------------------------------------
+DIMENSION_LABELS = {
+    "gender": ("Gender", "Female / Male"),
+    "age": ("Age", "Under 30 / 30 and older"),
+    "education": ("Education", "High school or other / Graduate or university"),
+    "marriage": ("Marital status", "Single / Married"),
+}
+
+
+def burden_sentence(comp: dict) -> str:
+    p, p_adj = comp["welch_t_pvalue"], comp["welch_t_pvalue_holm_adjusted"]
+    if comp["is_burden_statistically_significant"]:
+        return f"Statistically significant difference in algorithmic burden (p = {p:.4f}, p_adj = {p_adj:.4f} < 0.05)."
+    return f"No evidence of a difference in algorithmic burden (p = {p:.4f}, p_adj = {p_adj:.4f} ≥ 0.05); we fail to reject H₀."
+
+
+def feasibility_sentence(comp: dict) -> str:
+    p, p_adj = comp["fisher_feasibility_pvalue"], comp["fisher_pvalue_holm_adjusted"]
+    if comp["is_feasibility_statistically_significant"]:
+        return f"statistically significant feasibility gap (p = {p:.4f}, p_adj = {p_adj:.4f} < 0.05)"
+    return f"no statistically significant feasibility gap (p = {p:.4f}, p_adj = {p_adj:.4f} ≥ 0.05)"
+
+
 with tab3:
-    st.subheader("Auditoría Regulatoria de Equidad y Carga Algorítmica")
+    st.subheader("Regulatory Fairness and Algorithmic Burden Audit")
     st.markdown("""
-    Evaluación empírica en el **conjunto de prueba fuera de muestra (hold-out test set)** para evaluar si el modelo de crédito 
-    impone una **Carga Algorítmica Desproporcionada** a través de 4 dimensiones demográficas (Género, Edad, Educación y Estado Civil).
+    An empirical evaluation on the **hold-out test set** of whether the credit model imposes a 
+    **disproportionate algorithmic burden** across 4 demographic dimensions (sex, age, education, and marital status).
     """)
 
     audit_json_path = os.path.join(BASE_DIR, "models", "audit_disparity_results.json")
@@ -355,58 +454,58 @@ with tab3:
         overall = audit_data["overall"]
 
         # 4 Key Demographic Dimensions Cards
-        st.markdown("#### 1. Razones de Disparidad por Dimensión Demográfica")
+        st.markdown("#### 1. Burden Ratios by Demographic Dimension")
         col_g, col_a, col_e, col_m = st.columns(4)
 
         with col_g:
             g_comp = comps["gender"]
             ratio_g = g_comp["disparity_ratio"]
             st.metric(
-                "Género (Mujer / Hombre):",
+                f"{DIMENSION_LABELS['gender'][0]} ({DIMENSION_LABELS['gender'][1]}):",
                 f"{ratio_g:.3f}x",
-                delta=f"{(ratio_g - 1.0):+.1%} vs Paridad (1.00x)",
+                delta=f"{(ratio_g - 1.0):+.1%} vs. parity (1.00x)",
                 delta_color="inverse" if g_comp["is_burden_statistically_significant"] else "off"
             )
-            st.caption(f"Welch t-test: p = {g_comp['welch_t_pvalue']:.3f} (p_adj = {g_comp['welch_t_pvalue_holm_adjusted']:.3f}) | {'Significativo' if g_comp['is_burden_statistically_significant'] else 'Sin diferencia significativa'}")
+            st.caption(f"Welch t-test: p = {g_comp['welch_t_pvalue']:.3f} (p_adj = {g_comp['welch_t_pvalue_holm_adjusted']:.3f}) | {'Significant' if g_comp['is_burden_statistically_significant'] else 'No significant difference'}")
 
         with col_a:
             a_comp = comps["age"]
             ratio_a = a_comp["disparity_ratio"]
             st.metric(
-                "Edad (Jóvenes / Adultos 30+):",
+                f"{DIMENSION_LABELS['age'][0]} ({DIMENSION_LABELS['age'][1]}):",
                 f"{ratio_a:.3f}x",
-                delta=f"{(ratio_a - 1.0):+.1%} vs Paridad (1.00x)",
+                delta=f"{(ratio_a - 1.0):+.1%} vs. parity (1.00x)",
                 delta_color="inverse" if a_comp["is_burden_statistically_significant"] else "off"
             )
-            st.caption(f"Welch t-test: p = {a_comp['welch_t_pvalue']:.3f} (p_adj = {a_comp['welch_t_pvalue_holm_adjusted']:.3f}) | {'Significativo' if a_comp['is_burden_statistically_significant'] else 'Sin diferencia significativa'}")
+            st.caption(f"Welch t-test: p = {a_comp['welch_t_pvalue']:.3f} (p_adj = {a_comp['welch_t_pvalue_holm_adjusted']:.3f}) | {'Significant' if a_comp['is_burden_statistically_significant'] else 'No significant difference'}")
 
         with col_e:
             e_comp = comps["education"]
             ratio_e = e_comp["disparity_ratio"]
             st.metric(
-                "Educación (Media / Superior):",
+                f"{DIMENSION_LABELS['education'][0]} ({DIMENSION_LABELS['education'][1]}):",
                 f"{ratio_e:.3f}x",
-                delta=f"{(ratio_e - 1.0):+.1%} vs Paridad (1.00x)",
+                delta=f"{(ratio_e - 1.0):+.1%} vs. parity (1.00x)",
                 delta_color="inverse" if e_comp["is_burden_statistically_significant"] else "off"
             )
-            st.caption(f"Welch t-test: p = {e_comp['welch_t_pvalue']:.3f} (p_adj = {e_comp['welch_t_pvalue_holm_adjusted']:.3f}) | {'Significativo' if e_comp['is_burden_statistically_significant'] else 'Sin diferencia significativa'}")
+            st.caption(f"Welch t-test: p = {e_comp['welch_t_pvalue']:.3f} (p_adj = {e_comp['welch_t_pvalue_holm_adjusted']:.3f}) | {'Significant' if e_comp['is_burden_statistically_significant'] else 'No significant difference'}")
 
         with col_m:
             m_comp = comps["marriage"]
             ratio_m = m_comp["disparity_ratio"]
             st.metric(
-                "Estado Civil (Soltero / Casado):",
+                f"{DIMENSION_LABELS['marriage'][0]} ({DIMENSION_LABELS['marriage'][1]}):",
                 f"{ratio_m:.3f}x",
-                delta=f"{(ratio_m - 1.0):+.1%} vs Paridad (1.00x)",
+                delta=f"{(ratio_m - 1.0):+.1%} vs. parity (1.00x)",
                 delta_color="inverse" if m_comp["is_burden_statistically_significant"] else "off"
             )
-            st.caption(f"Welch t-test: p = {m_comp['welch_t_pvalue']:.3f} (p_adj = {m_comp['welch_t_pvalue_holm_adjusted']:.3f}) | {'Significativo' if m_comp['is_burden_statistically_significant'] else 'Sin diferencia significativa'}")
+            st.caption(f"Welch t-test: p = {m_comp['welch_t_pvalue']:.3f} (p_adj = {m_comp['welch_t_pvalue_holm_adjusted']:.3f}) | {'Significant' if m_comp['is_burden_statistically_significant'] else 'No significant difference'}")
 
         st.info(
-            "⚠️ **Aviso Metodológico sobre Sesgo de Supervivencia:** Una razón de carga condicional inferior a 1.00x "
-            "**no** debe interpretarse como menor esfuerzo si va acompañada de una menor tasa de factibilidad. "
-            "El esfuerzo se calcula exclusivamente sobre solicitantes que logran obtener un plan viable dentro de las restricciones; "
-            "los perfiles en mayor estrés financiero son descartados como inviables, lo que puede subestimar la carga media de dichos grupos."
+            "⚠️ **Methodological note on survivorship bias:** A conditional burden ratio below 1.00x should **not** be read as "
+            "lower effort if it comes with a lower feasibility rate. Effort is only measured for applicants who obtain a feasible plan "
+            "within the constraints; the most financially stressed profiles are dropped as infeasible, which can understate the "
+            "average burden of those groups."
         )
 
         st.markdown("---")
@@ -414,66 +513,66 @@ with tab3:
         # Overall Metrics Cards
         col_ov1, col_ov2, col_ov3 = st.columns(3)
         with col_ov1:
-            st.metric("Tasa de Factibilidad Global:", f"{overall['feasibility_rate_pct']:.1f}%", delta="Rutas viables encontradas")
-            st.caption(f"{overall['successful_total']} de {overall['evaluated_total']} solicitudes evaluadas en conjunto de prueba.")
+            st.metric("Overall Recourse Feasibility:", f"{overall['feasibility_rate_pct']:.1f}%", delta="Feasible plans found")
+            st.caption(f"{overall['successful_total']} of {overall['evaluated_total']} evaluated test-set applicants.")
         with col_ov2:
-            st.metric("Carga Algorítmica Condicional Media:", f"{overall['mean_burden']:.2f}", delta=f"IC 95%: [{overall['ci_95_lower']:.2f}, {overall['ci_95_upper']:.2f}]")
-            st.caption("Distancia L1 normalizada en desviaciones estándar de la población.")
+            st.metric("Mean Conditional Algorithmic Burden:", f"{overall['mean_burden']:.2f}", delta=f"95% CI: [{overall['ci_95_lower']:.2f}, {overall['ci_95_upper']:.2f}]")
+            st.caption("L1 distance normalized by population standard deviations.")
         with col_ov3:
-            st.metric("Población Denegada en Test:", f"{audit_data['metadata']['model_rejected_sample_size']:,}", delta=f"De {audit_data['metadata']['test_sample_size']:,} casos evaluados")
-            st.caption(f"Solicitudes con P(default) >= {audit_data['metadata']['threshold']:.0%}.")
+            st.metric("Rejected Applicants in Test Set:", f"{audit_data['metadata']['model_rejected_sample_size']:,}", delta=f"Out of {audit_data['metadata']['test_sample_size']:,} test cases")
+            st.caption(f"Applications with P(default) ≥ {audit_data['metadata']['threshold']:.0%}.")
 
         st.markdown("---")
 
         col_plot, col_recs = st.columns([1.3, 1])
         with col_plot:
-            st.markdown("#### Distribución de Esfuerzo Normalizado L1 (Con Intervalos de Confianza 95%)")
+            st.markdown("#### Normalized L1 Effort by Subgroup (with 95% Confidence Intervals)")
             plot_img_path = os.path.join(BASE_DIR, "models", "audit_disparity_plot.png")
             if os.path.exists(plot_img_path):
                 st.image(plot_img_path, use_container_width=True)
 
         with col_recs:
-            st.markdown("#### 🏛️ Conclusiones y Recomendaciones Regulatorias (CONDUSEF & Ley Fintech)")
+            st.markdown("#### 🏛️ Conclusions and Regulatory Recommendations (CONDUSEF & Mexico's Fintech Law)")
             
-            sub_high = subgroups.get("Higher Ed (Grad/Univ)", {})
-            sub_sec = subgroups.get("Secondary / Other", {})
-            sub_yng = subgroups.get("Young (< 30)", {})
-            sub_old = subgroups.get("Adultos (≥ 30)", subgroups.get("Older (>= 30)", {}))
+            sub_high = subgroups.get("Graduate / University", {})
+            sub_sec = subgroups.get("High school / Other", {})
+            sub_yng = subgroups.get("Under 30", {})
+            sub_old = subgroups.get("30 and older", {})
             
             st.markdown(f"""
-            1. **Dimensión de Género ({g_comp['ratio_label']}: {g_comp['disparity_ratio']:.3f}x):**  
-               {g_comp['burden_conclusion']}
-            2. **Dimensión de Edad ({a_comp['ratio_label']}: {a_comp['disparity_ratio']:.3f}x):**  
-               {a_comp['burden_conclusion']}  
-               *Factibilidad:* {sub_yng.get('feasibility_rate_pct', 0.0):.1f}% en jóvenes vs. {sub_old.get('feasibility_rate_pct', 0.0):.1f}% en adultos de 30+ ({a_comp['feasibility_conclusion']}).
-            3. **Dimensión Educativa ({e_comp['ratio_label']}: {e_comp['disparity_ratio']:.3f}x):**  
-               {e_comp['burden_conclusion']}  
-               *Factibilidad:* {sub_high.get('feasibility_rate_pct', 0.0):.1f}% en educación superior vs. {sub_sec.get('feasibility_rate_pct', 0.0):.1f}% en educación media ({e_comp['feasibility_conclusion']}).
-            4. **Dimensión de Estado Civil ({m_comp['ratio_label']}: {m_comp['disparity_ratio']:.3f}x):**  
-               {m_comp['burden_conclusion']}
-            5. **Control de Sesgo de Supervivencia y Corrección Múltiple:**  
-               La carga condicional solo evalúa casos con solución factible ({overall['feasibility_rate_pct']:.1f}% global). Por ello, se audita simultáneamente la factibilidad mediante la prueba exacta de Fisher y se reportan correcciones Holm-Bonferroni para controlar la tasa de error por familia (tanto a nivel dominio de 4 pruebas como global de 8 pruebas).
+            1. **Gender ({DIMENSION_LABELS['gender'][1]}: {g_comp['disparity_ratio']:.3f}x):**  
+               {burden_sentence(g_comp)}
+            2. **Age ({DIMENSION_LABELS['age'][1]}: {a_comp['disparity_ratio']:.3f}x):**  
+               {burden_sentence(a_comp)}  
+               *Feasibility:* {sub_yng.get('feasibility_rate_pct', 0.0):.1f}% for applicants under 30 vs. {sub_old.get('feasibility_rate_pct', 0.0):.1f}% for applicants 30 and older ({feasibility_sentence(a_comp)}).
+            3. **Education ({DIMENSION_LABELS['education'][1]}: {e_comp['disparity_ratio']:.3f}x):**  
+               {burden_sentence(e_comp)}  
+               *Feasibility:* {sub_high.get('feasibility_rate_pct', 0.0):.1f}% for graduate/university vs. {sub_sec.get('feasibility_rate_pct', 0.0):.1f}% for high school/other ({feasibility_sentence(e_comp)}).
+            4. **Marital status ({DIMENSION_LABELS['marriage'][1]}: {m_comp['disparity_ratio']:.3f}x):**  
+               {burden_sentence(m_comp)}
+            5. **Survivorship bias and multiple-testing control:**  
+               Conditional burden only covers applicants with a feasible plan ({overall['feasibility_rate_pct']:.1f}% overall). Feasibility is therefore audited separately with Fisher's exact test, and Holm-Bonferroni corrections control the family-wise error rate (both per family of 4 tests and globally across all 8 tests).
             """)
 
         # Statistical Testing Detail Expander
-        with st.expander("🔬 Ver Detalles de Pruebas de Hipótesis y Corrección Holm-Bonferroni"):
-            st.markdown("### Tabla Comparativa de Pruebas Estadísticas")
+        with st.expander("🔬 Hypothesis Test Details and Holm-Bonferroni Correction"):
+            st.markdown("### Statistical Test Comparison Table")
             detail_records = []
             for dim_key, c_info in comps.items():
                 detail_records.append({
-                    "Dimensión": c_info["dimension"],
-                    "Comparación": f"{c_info['group_a']} vs {c_info['group_b']}",
-                    "Razón Carga": f"{c_info['disparity_ratio']:.3f}x",
+                    "Dimension": DIMENSION_LABELS.get(dim_key, (c_info["dimension"],))[0],
+                    "Comparison": f"{c_info['group_a']} vs. {c_info['group_b']}",
+                    "Burden ratio": f"{c_info['disparity_ratio']:.3f}x",
                     "Welch p (raw)": f"{c_info['welch_t_pvalue']:.4f}",
                     "Welch p (Holm 4-tests)": f"{c_info['welch_t_pvalue_holm_adjusted']:.4f}",
                     "Welch p (Holm global 8-tests)": f"{c_info.get('welch_t_pvalue_holm_global_8tests', c_info['welch_t_pvalue_holm_adjusted']):.4f}",
-                    "Brecha Factibilidad": f"{c_info['feasibility_gap_pct']:+.1f}%",
+                    "Feasibility gap": f"{c_info['feasibility_gap_pct']:+.1f} pts",
                     "Fisher p (raw)": f"{c_info['fisher_feasibility_pvalue']:.4f}",
                     "Fisher p (Holm 4-tests)": f"{c_info['fisher_pvalue_holm_adjusted']:.4f}",
                     "Fisher p (Holm global 8-tests)": f"{c_info.get('fisher_pvalue_holm_global_8tests', c_info['fisher_pvalue_holm_adjusted']):.4f}",
-                    "Significativo (p_adj < 0.05)": "Sí (p_adj < 0.05)" if (c_info["is_burden_statistically_significant"] or c_info["is_feasibility_statistically_significant"]) else "No (p_adj >= 0.05)"
+                    "Significant (p_adj < 0.05)": "Yes (p_adj < 0.05)" if (c_info["is_burden_statistically_significant"] or c_info["is_feasibility_statistically_significant"]) else "No (p_adj ≥ 0.05)"
                 })
             st.dataframe(pd.DataFrame(detail_records), use_container_width=True)
 
     else:
-        st.warning("No se encontraron resultados de auditoría previa. Ejecute `python src/audit.py` para generar métricas.")
+        st.warning("No audit results found. Run `python src/audit.py` to generate them.")

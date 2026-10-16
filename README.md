@@ -1,4 +1,4 @@
-# AIPI 590 - Project 1: ¿Por qué me rechazaron?
+# AIPI 590 - Project 1: Why Was I Rejected?
 ### Auditing Algorithmic Recourse, Actionability, and Burden Disparity in Consumer Credit Risk
 
 ## 📌 Overview

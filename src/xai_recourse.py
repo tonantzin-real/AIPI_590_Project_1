@@ -1,7 +1,7 @@
 """
 =============================================================================
 MODULE: xai_recourse.py
-PROJECT: AIPI 590 - Project 1: ¿Por qué me rechazaron?
+PROJECT: AIPI 590 - Project 1: Why Was I Rejected?
 AUTHOR: Tonantzin Real Rojas
 DESCRIPTION:
     Algorithmic Recourse engine using Microsoft's DiCE (Diverse Counterfactual

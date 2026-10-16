@@ -1,7 +1,7 @@
 """
 =============================================================================
 MODULE: data_loader.py
-PROJECT: AIPI 590 - Project 1: ¿Por qué me rechazaron?
+PROJECT: AIPI 590 - Project 1: Why Was I Rejected?
 AUTHOR: Tonantzin Real Rojas
 DESCRIPTION:
     Data ingestion, preprocessing, and feature metadata definitions for the
@@ -72,19 +72,19 @@ INSTITUTIONAL_FEATURES = ["LIMIT_BAL"]
 # 3. PAY_AMT1: Increase current monthly payment towards the bill
 ACTIONABLE_FEATURES = ["PAY_1", "BILL_AMT1", "PAY_AMT1"]
 
-# Human-readable labels for categorical codes (Spanish / English for bilingual UI)
+# Human-readable labels for categorical codes
 CATEGORICAL_LABELS = {
-    "SEX": {1: "Hombre / Male", 2: "Mujer / Female"},
+    "SEX": {1: "Male", 2: "Female"},
     "EDUCATION": {
-        1: "Posgrado / Graduate School",
-        2: "Universidad / University",
-        3: "Preparatoria / High School",
-        4: "Otro / Other"
+        1: "Graduate school",
+        2: "University",
+        3: "High school",
+        4: "Other"
     },
     "MARRIAGE": {
-        1: "Casado(a) / Married",
-        2: "Soltero(a) / Single",
-        3: "Otro / Other"
+        1: "Married",
+        2: "Single",
+        3: "Other"
     }
 }
 

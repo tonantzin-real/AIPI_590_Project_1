@@ -50,8 +50,8 @@
         "ci_95_upper": 2.33
     },
     "subgroups": {
-        "Male (Hombre)": {
-            "group": "Male (Hombre)",
+        "Male": {
+            "group": "Male",
             "pool_size": 770,
             "evaluated_n": 80,
             "successful_recourse_n": 36,
@@ -64,8 +64,8 @@
             "median_burden": 1.68,
             "std_burden": 2.04
         },
-        "Female (Mujer)": {
-            "group": "Female (Mujer)",
+        "Female": {
+            "group": "Female",
             "pool_size": 979,
             "evaluated_n": 80,
             "successful_recourse_n": 38,
@@ -78,8 +78,8 @@
             "median_burden": 1.94,
             "std_burden": 1.61
         },
-        "Young (< 30)": {
-            "group": "Young (< 30)",
+        "Under 30": {
+            "group": "Under 30",
             "pool_size": 583,
             "evaluated_n": 80,
             "successful_recourse_n": 31,
@@ -92,8 +92,8 @@
             "median_burden": 0.9,
             "std_burden": 1.8
         },
-        "Adultos (\u2265 30)": {
-            "group": "Adultos (\u2265 30)",
+        "30 and older": {
+            "group": "30 and older",
             "pool_size": 1166,
             "evaluated_n": 80,
             "successful_recourse_n": 36,
@@ -106,8 +106,8 @@
             "median_burden": 2.11,
             "std_burden": 1.83
         },
-        "Higher Ed (Grad/Univ)": {
-            "group": "Higher Ed (Grad/Univ)",
+        "Graduate / University": {
+            "group": "Graduate / University",
             "pool_size": 1397,
             "evaluated_n": 80,
             "successful_recourse_n": 36,
@@ -120,8 +120,8 @@
             "median_burden": 2.02,
             "std_burden": 1.62
         },
-        "Secondary / Other": {
-            "group": "Secondary / Other",
+        "High school / Other": {
+            "group": "High school / Other",
             "pool_size": 352,
             "evaluated_n": 80,
             "successful_recourse_n": 32,
@@ -134,8 +134,8 @@
             "median_burden": 1.93,
             "std_burden": 0.87
         },
-        "Married (Casado/a)": {
-            "group": "Married (Casado/a)",
+        "Married": {
+            "group": "Married",
             "pool_size": 845,
             "evaluated_n": 80,
             "successful_recourse_n": 38,
@@ -148,8 +148,8 @@
             "median_burden": 1.93,
             "std_burden": 1.71
         },
-        "Single (Soltero/a)": {
-            "group": "Single (Soltero/a)",
+        "Single": {
+            "group": "Single",
             "pool_size": 880,
             "evaluated_n": 80,
             "successful_recourse_n": 38,
@@ -166,10 +166,10 @@
     "comparisons": {
         "gender": {
             "dimension": "Gender",
-            "group_a": "Female (Mujer)",
-            "group_b": "Male (Hombre)",
+            "group_a": "Female",
+            "group_b": "Male",
             "disparity_ratio": 1.009,
-            "ratio_label": "Mujer / Hombre",
+            "ratio_label": "Female / Male",
             "mean_difference": 0.02,
             "welch_t_stat": 0.057,
             "welch_t_pvalue": 0.9546,
@@ -185,16 +185,16 @@
             "is_burden_statistically_significant": false,
             "is_feasibility_statistically_significant": false,
             "is_statistically_significant": false,
-            "burden_conclusion": "Sin evidencia de disparidad en carga algor\u00edtmica (p = 0.9546, p_adj = 1.0000 >= 0.05); no se rechaza H0.",
-            "feasibility_conclusion": "Sin brecha estad\u00edsticamente significativa en factibilidad (p = 0.8741, p_adj = 1.0000 >= 0.05).",
-            "conclusion": "Sin evidencia de disparidad en carga algor\u00edtmica (p = 0.9546, p_adj = 1.0000 >= 0.05); no se rechaza H0. Sin brecha estad\u00edsticamente significativa en factibilidad (p = 0.8741, p_adj = 1.0000 >= 0.05)."
+            "burden_conclusion": "No evidence of a difference in algorithmic burden (p = 0.9546, p_adj = 1.0000 >= 0.05); we fail to reject H0.",
+            "feasibility_conclusion": "No statistically significant recourse feasibility gap (p = 0.8741, p_adj = 1.0000 >= 0.05).",
+            "conclusion": "No evidence of a difference in algorithmic burden (p = 0.9546, p_adj = 1.0000 >= 0.05); we fail to reject H0. No statistically significant recourse feasibility gap (p = 0.8741, p_adj = 1.0000 >= 0.05)."
         },
         "age": {
             "dimension": "Age",
-            "group_a": "Young (< 30)",
-            "group_b": "Adultos (\u2265 30)",
+            "group_a": "Under 30",
+            "group_b": "30 and older",
             "disparity_ratio": 0.747,
-            "ratio_label": "J\u00f3venes / Adultos (30+)",
+            "ratio_label": "Under 30 / 30 and older",
             "mean_difference": -0.63,
             "welch_t_stat": -1.419,
             "welch_t_pvalue": 0.1609,
@@ -210,16 +210,16 @@
             "is_burden_statistically_significant": false,
             "is_feasibility_statistically_significant": false,
             "is_statistically_significant": false,
-            "burden_conclusion": "Sin evidencia de disparidad en carga algor\u00edtmica (p = 0.1609, p_adj = 0.6435 >= 0.05); no se rechaza H0.",
-            "feasibility_conclusion": "Sin brecha estad\u00edsticamente significativa en factibilidad (p = 0.5217, p_adj = 1.0000 >= 0.05).",
-            "conclusion": "Sin evidencia de disparidad en carga algor\u00edtmica (p = 0.1609, p_adj = 0.6435 >= 0.05); no se rechaza H0. Sin brecha estad\u00edsticamente significativa en factibilidad (p = 0.5217, p_adj = 1.0000 >= 0.05)."
+            "burden_conclusion": "No evidence of a difference in algorithmic burden (p = 0.1609, p_adj = 0.6435 >= 0.05); we fail to reject H0.",
+            "feasibility_conclusion": "No statistically significant recourse feasibility gap (p = 0.5217, p_adj = 1.0000 >= 0.05).",
+            "conclusion": "No evidence of a difference in algorithmic burden (p = 0.1609, p_adj = 0.6435 >= 0.05); we fail to reject H0. No statistically significant recourse feasibility gap (p = 0.5217, p_adj = 1.0000 >= 0.05)."
         },
         "education": {
             "dimension": "Education",
-            "group_a": "Secondary / Other",
-            "group_b": "Higher Ed (Grad/Univ)",
+            "group_a": "High school / Other",
+            "group_b": "Graduate / University",
             "disparity_ratio": 0.858,
-            "ratio_label": "Media / Superior",
+            "ratio_label": "High school or other / Graduate or university",
             "mean_difference": -0.31,
             "welch_t_stat": -1.001,
             "welch_t_pvalue": 0.3211,
@@ -235,16 +235,16 @@
             "is_burden_statistically_significant": false,
             "is_feasibility_statistically_significant": false,
             "is_statistically_significant": false,
-            "burden_conclusion": "Sin evidencia de disparidad en carga algor\u00edtmica (p = 0.3211, p_adj = 0.9634 >= 0.05); no se rechaza H0.",
-            "feasibility_conclusion": "Sin brecha estad\u00edsticamente significativa en factibilidad (p = 0.6315, p_adj = 1.0000 >= 0.05).",
-            "conclusion": "Sin evidencia de disparidad en carga algor\u00edtmica (p = 0.3211, p_adj = 0.9634 >= 0.05); no se rechaza H0. Sin brecha estad\u00edsticamente significativa en factibilidad (p = 0.6315, p_adj = 1.0000 >= 0.05)."
+            "burden_conclusion": "No evidence of a difference in algorithmic burden (p = 0.3211, p_adj = 0.9634 >= 0.05); we fail to reject H0.",
+            "feasibility_conclusion": "No statistically significant recourse feasibility gap (p = 0.6315, p_adj = 1.0000 >= 0.05).",
+            "conclusion": "No evidence of a difference in algorithmic burden (p = 0.3211, p_adj = 0.9634 >= 0.05); we fail to reject H0. No statistically significant recourse feasibility gap (p = 0.6315, p_adj = 1.0000 >= 0.05)."
         },
         "marriage": {
             "dimension": "Marriage",
-            "group_a": "Single (Soltero/a)",
-            "group_b": "Married (Casado/a)",
+            "group_a": "Single",
+            "group_b": "Married",
             "disparity_ratio": 1.01,
-            "ratio_label": "Soltero / Casado",
+            "ratio_label": "Single / Married",
             "mean_difference": 0.02,
             "welch_t_stat": 0.057,
             "welch_t_pvalue": 0.9546,
@@ -260,9 +260,9 @@
             "is_burden_statistically_significant": false,
             "is_feasibility_statistically_significant": false,
             "is_statistically_significant": false,
-            "burden_conclusion": "Sin evidencia de disparidad en carga algor\u00edtmica (p = 0.9546, p_adj = 1.0000 >= 0.05); no se rechaza H0.",
-            "feasibility_conclusion": "Sin brecha estad\u00edsticamente significativa en factibilidad (p = 1.0000, p_adj = 1.0000 >= 0.05).",
-            "conclusion": "Sin evidencia de disparidad en carga algor\u00edtmica (p = 0.9546, p_adj = 1.0000 >= 0.05); no se rechaza H0. Sin brecha estad\u00edsticamente significativa en factibilidad (p = 1.0000, p_adj = 1.0000 >= 0.05)."
+            "burden_conclusion": "No evidence of a difference in algorithmic burden (p = 0.9546, p_adj = 1.0000 >= 0.05); we fail to reject H0.",
+            "feasibility_conclusion": "No statistically significant recourse feasibility gap (p = 1.0000, p_adj = 1.0000 >= 0.05).",
+            "conclusion": "No evidence of a difference in algorithmic burden (p = 0.9546, p_adj = 1.0000 >= 0.05); we fail to reject H0. No statistically significant recourse feasibility gap (p = 1.0000, p_adj = 1.0000 >= 0.05)."
         }
     }
 }

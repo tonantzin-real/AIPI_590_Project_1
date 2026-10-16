@@ -1,7 +1,7 @@
 """
 =============================================================================
 MODULE: audit.py
-PROJECT: AIPI 590 - Project 1: ¿Por qué me rechazaron?
+PROJECT: AIPI 590 - Project 1: Why Was I Rejected?
 AUTHOR: Tonantzin Real Rojas
 DESCRIPTION:
     Audits Algorithmic Recourse Disparity, Feasibility, and Burden Inequality
@@ -136,14 +136,14 @@ def run_demographic_recourse_audit(
 
     # 4. Define Subgroups across 4 Demographic Dimensions
     demographic_groups = {
-        "Male (Hombre)": rejected_test_df[rejected_test_df["SEX"] == 1],
-        "Female (Mujer)": rejected_test_df[rejected_test_df["SEX"] == 2],
-        "Young (< 30)": rejected_test_df[rejected_test_df["AGE"] < 30],
-        "Adultos (≥ 30)": rejected_test_df[rejected_test_df["AGE"] >= 30],
-        "Higher Ed (Grad/Univ)": rejected_test_df[rejected_test_df["EDUCATION"].isin([1, 2])],
-        "Secondary / Other": rejected_test_df[rejected_test_df["EDUCATION"].isin([3, 4])],
-        "Married (Casado/a)": rejected_test_df[rejected_test_df["MARRIAGE"] == 1],
-        "Single (Soltero/a)": rejected_test_df[rejected_test_df["MARRIAGE"] == 2],
+        "Male": rejected_test_df[rejected_test_df["SEX"] == 1],
+        "Female": rejected_test_df[rejected_test_df["SEX"] == 2],
+        "Under 30": rejected_test_df[rejected_test_df["AGE"] < 30],
+        "30 and older": rejected_test_df[rejected_test_df["AGE"] >= 30],
+        "Graduate / University": rejected_test_df[rejected_test_df["EDUCATION"].isin([1, 2])],
+        "High school / Other": rejected_test_df[rejected_test_df["EDUCATION"].isin([3, 4])],
+        "Married": rejected_test_df[rejected_test_df["MARRIAGE"] == 1],
+        "Single": rejected_test_df[rejected_test_df["MARRIAGE"] == 2],
     }
 
     group_results = {}
@@ -198,10 +198,10 @@ def run_demographic_recourse_audit(
 
     # 5. Perform Formal Statistical Hypothesis Testing between Pairs
     pairs = [
-        ("Gender", "Female (Mujer)", "Male (Hombre)", "Mujer / Hombre"),
-        ("Age", "Young (< 30)", "Adultos (≥ 30)", "Jóvenes / Adultos (30+)"),
-        ("Education", "Secondary / Other", "Higher Ed (Grad/Univ)", "Media / Superior"),
-        ("Marriage", "Single (Soltero/a)", "Married (Casado/a)", "Soltero / Casado"),
+        ("Gender", "Female", "Male", "Female / Male"),
+        ("Age", "Under 30", "30 and older", "Under 30 / 30 and older"),
+        ("Education", "High school / Other", "Graduate / University", "High school or other / Graduate or university"),
+        ("Marriage", "Single", "Married", "Single / Married"),
     ]
 
     raw_comps = []
@@ -274,15 +274,15 @@ def run_demographic_recourse_audit(
         is_feasibility_sig = bool(f_adj_domain < 0.05)
 
         burden_conclusion = (
-            f"Diferencia estadísticamente significativa en carga (p = {t_pval:.4f}, p_adj = {t_adj_domain:.4f} < 0.05)."
+            f"Statistically significant difference in algorithmic burden (p = {t_pval:.4f}, p_adj = {t_adj_domain:.4f} < 0.05)."
             if is_burden_sig else
-            f"Sin evidencia de disparidad en carga algorítmica (p = {t_pval:.4f}, p_adj = {t_adj_domain:.4f} >= 0.05); no se rechaza H0."
+            f"No evidence of a difference in algorithmic burden (p = {t_pval:.4f}, p_adj = {t_adj_domain:.4f} >= 0.05); we fail to reject H0."
         )
 
         feasibility_conclusion = (
-            f"Brecha de factibilidad estadísticamente significativa (p = {f_pval:.4f}, p_adj = {f_adj_domain:.4f} < 0.05)."
+            f"Statistically significant recourse feasibility gap (p = {f_pval:.4f}, p_adj = {f_adj_domain:.4f} < 0.05)."
             if is_feasibility_sig else
-            f"Sin brecha estadísticamente significativa en factibilidad (p = {f_pval:.4f}, p_adj = {f_adj_domain:.4f} >= 0.05)."
+            f"No statistically significant recourse feasibility gap (p = {f_pval:.4f}, p_adj = {f_adj_domain:.4f} >= 0.05)."
         )
 
         c["welch_t_pvalue_holm_adjusted"] = t_adj_domain
@@ -351,9 +351,9 @@ def run_demographic_recourse_audit(
             "Error Lower": g_info["mean_burden"] - g_info["ci_95_lower"],
             "Error Upper": g_info["ci_95_upper"] - g_info["mean_burden"],
             "Category": (
-                "Gender" if "Hombre" in g_name or "Mujer" in g_name else
+                "Gender" if g_name in ("Male", "Female") else
                 "Age" if "30" in g_name else
-                "Education" if "Ed" in g_name or "Secondary" in g_name else
+                "Education" if g_name in ("Graduate / University", "High school / Other") else
                 "Marriage"
             )
         })
