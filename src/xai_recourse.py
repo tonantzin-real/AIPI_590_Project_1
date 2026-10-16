@@ -21,6 +21,7 @@ from typing import Dict, Any, List, Tuple, Optional
 import numpy as np
 import pandas as pd
 import dice_ml
+from raiutils.exceptions import UserConfigValidationException
 
 # Relative import with robust base directory resolution
 import sys
@@ -123,20 +124,23 @@ class CreditRecourseEngine:
             features_to_vary = [c for c in custom_features_to_vary if c not in prohibited]
 
         query_row = query_instance.iloc[0]
+        current_pay1 = int(query_row.get("PAY_1", 0))
         current_bill = float(query_row.get("BILL_AMT1", 0.0))
         current_pay = float(query_row.get("PAY_AMT1", 0.0))
 
         # Directional and realistic boundary constraints:
-        # 1. PAY_1: Must be on-time, fully paid, or no consumption (<= 0), cannot worsen delay.
+        # 1. PAY_1: Must stay the same or improve (<= min(0, current_pay1)). Cannot worsen (e.g. -2 to 0 is blocked).
         # 2. BILL_AMT1: Must pay down or maintain debt (0 to current bill), never increase debt.
-        # 3. PAY_AMT1: Must increase or maintain payment amount.
+        # 3. PAY_AMT1: Tied to current bill. An applicant can pay from current payment up to paying off the full bill.
         permitted_range = {}
         if "PAY_1" in features_to_vary:
-            permitted_range["PAY_1"] = [-2, 0]
+            permitted_range["PAY_1"] = [-2, min(0, current_pay1)]
         if "BILL_AMT1" in features_to_vary:
             permitted_range["BILL_AMT1"] = [0.0, max(current_bill, 0.0)]
         if "PAY_AMT1" in features_to_vary:
-            permitted_range["PAY_AMT1"] = [max(current_pay, 0.0), max(current_pay * 3, 100000.0)]
+            effective_bill = max(0.0, current_bill)
+            max_payment_cap = max(effective_bill, current_pay, 1000.0)
+            permitted_range["PAY_AMT1"] = [float(current_pay), max_payment_cap]
 
         # Generate diverse counterfactuals targeting DEFAULT=0 (Approved)
         try:
@@ -150,8 +154,13 @@ class CreditRecourseEngine:
                 verbose=False
             )
             cf_df = dice_exp.cf_examples_list[0].final_cfs_df
+        except UserConfigValidationException:
+            # DiCE specifically raises UserConfigValidationException when no counterfactual exists within constraints
+            return pd.DataFrame(), pd.DataFrame(), 0.0
         except Exception as e:
-            # When no counterfactual exists within the strict constraints, report gracefully
+            # Log unexpected errors while preserving pipeline execution
+            import warnings
+            warnings.warn(f"[xai_recourse] Unexpected error generating counterfactuals: {e}")
             return pd.DataFrame(), pd.DataFrame(), 0.0
 
         if cf_df is None or len(cf_df) == 0:

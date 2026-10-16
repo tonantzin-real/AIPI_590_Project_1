@@ -13,9 +13,11 @@ DESCRIPTION:
 
     Methodological & Statistical Rigor:
       - Uses actual model-predicted rejections on the hold-out test set (no data leakage).
-      - Enforces strict actionability constraints (immutable, historical, and institutional traits locked).
-      - Computes empirical feasibility rates (% receiving viable recourse).
-      - Performs formal statistical hypothesis tests (Welch's t-test and Mann-Whitney U test).
+      - Enforces strict actionability constraints (monotonic payment bounds, bill-coupled payments).
+      - Computes empirical feasibility rates and audits them via Fisher's Exact Test.
+      - Evaluates conditional algorithmic burden using Welch's t-test and Mann-Whitney U test.
+      - Applies Holm-Bonferroni step-down correction for multiple hypothesis testing.
+      - Accounts for survivorship bias by analyzing feasibility and burden in tandem.
       - Reports 95% Confidence Intervals for Algorithmic Burden.
 =============================================================================
 """
@@ -29,12 +31,20 @@ import pandas as pd
 from scipy import stats
 import matplotlib.pyplot as plt
 import seaborn as sns
+from matplotlib.patches import Patch
 
 # Relative import with robust base directory resolution
 import sys
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(BASE_DIR)
-from src.data_loader import get_train_test_data, DEFAULT_DATA_PATH
+from src.data_loader import (
+    get_train_test_data,
+    DEFAULT_DATA_PATH,
+    IMMUTABLE_FEATURES,
+    HISTORICAL_FEATURES,
+    INSTITUTIONAL_FEATURES,
+    ACTIONABLE_FEATURES,
+)
 from src.xai_recourse import CreditRecourseEngine
 
 DEFAULT_MODEL_PATH = os.path.join(BASE_DIR, "models", "credit_model.joblib")
@@ -53,6 +63,24 @@ def compute_ci(data: List[float], confidence: float = 0.95) -> Tuple[float, floa
     se = float(stats.sem(data))
     h = float(se * stats.t.ppf((1 + confidence) / 2., n - 1))
     return round(mean, 2), round(max(0.0, mean - h), 2), round(mean + h, 2)
+
+
+def holm_bonferroni_correction(p_values: List[float]) -> List[float]:
+    """
+    Applies Holm-Bonferroni step-down correction to control family-wise error rate.
+    """
+    m = len(p_values)
+    if m == 0:
+        return []
+    indexed = sorted(enumerate(p_values), key=lambda x: x[1])
+    adjusted = [0.0] * m
+    running_max = 0.0
+    for rank, (orig_idx, p) in enumerate(indexed):
+        step = m - rank
+        adj_p = min(1.0, p * step)
+        running_max = max(running_max, adj_p)
+        adjusted[orig_idx] = round(running_max, 4)
+    return adjusted
 
 
 def run_demographic_recourse_audit(
@@ -76,26 +104,37 @@ def run_demographic_recourse_audit(
     """
     os.makedirs(output_dir, exist_ok=True)
 
-    # 1. Load out-of-sample test set (prevents training data leakage)
+    # 1. Load model metadata to retrieve official threshold
+    metadata_path = os.path.join(output_dir, "model_metadata.json")
+    threshold = 0.50
+    if os.path.exists(metadata_path):
+        try:
+            with open(metadata_path, "r") as mf:
+                meta = json.load(mf)
+                threshold = meta.get("threshold", 0.50)
+        except Exception:
+            threshold = 0.50
+
+    # 2. Load out-of-sample test set (prevents training data leakage)
     _, X_test, _, y_test = get_train_test_data(random_state=random_state)
     model = joblib.load(model_path)
 
-    # 2. Identify applicants ACTUALLY rejected by the model decision (P(default) >= 0.50)
+    # 3. Identify applicants ACTUALLY rejected by the model decision (P(default) >= threshold)
     y_pred_proba = model.predict_proba(X_test)[:, 1]
-    threshold = 0.50
     model_rejected_mask = (y_pred_proba >= threshold)
     rejected_test_df = X_test[model_rejected_mask].copy()
 
     print("\n" + "=" * 65)
     print("STARTING RESPONSIBLE AI DEMOGRAPHIC RECOURSE AUDIT")
     print(f"Total Test Set Size:               {len(X_test)} applicants")
+    print(f"Model Risk Cutoff Threshold:       {threshold:.2f}")
     print(f"Model-Predicted Denials in Test:   {len(rejected_test_df)} ({len(rejected_test_df)/len(X_test):.1%})")
     print(f"Sample Evaluated per Subgroup:     {sample_per_group} applicants")
     print("=" * 65)
 
     engine = CreditRecourseEngine(model_path=model_path, random_state=random_state)
 
-    # 3. Define Subgroups across 4 Demographic Dimensions
+    # 4. Define Subgroups across 4 Demographic Dimensions
     demographic_groups = {
         "Male (Hombre)": rejected_test_df[rejected_test_df["SEX"] == 1],
         "Female (Mujer)": rejected_test_df[rejected_test_df["SEX"] == 2],
@@ -135,6 +174,7 @@ def run_demographic_recourse_audit(
             "pool_size": int(len(group_data)),
             "evaluated_n": int(len(sample)),
             "successful_recourse_n": int(cfs_found_count),
+            "infeasible_recourse_n": int(len(sample) - cfs_found_count),
             "feasibility_rate_pct": round(feasibility_rate, 1),
             "mean_burden": mean_b,
             "ci_95_lower": ci_lower,
@@ -143,9 +183,9 @@ def run_demographic_recourse_audit(
             "std_burden": round(std_b, 2),
         }
         print(f"  -> Feasibility Rate: {feasibility_rate:.1f}% ({cfs_found_count}/{len(sample)})")
-        print(f"  -> Mean Burden:     {mean_b:.2f} (95% CI: [{ci_lower:.2f}, {ci_upper:.2f}])")
+        print(f"  -> Conditional Burden: {mean_b:.2f} (95% CI: [{ci_lower:.2f}, {ci_upper:.2f}])")
 
-    # 4. Perform Formal Statistical Hypothesis Testing between Pairs
+    # 5. Perform Formal Statistical Hypothesis Testing between Pairs
     pairs = [
         ("Gender", "Female (Mujer)", "Male (Hombre)", "Female / Male"),
         ("Age", "Young (< 30)", "Older (>= 30)", "Young / Older"),
@@ -153,7 +193,10 @@ def run_demographic_recourse_audit(
         ("Marriage", "Single (Soltero/a)", "Married (Casado/a)", "Single / Married"),
     ]
 
-    dimension_comparisons = {}
+    raw_comps = []
+    welch_pvals = []
+    fisher_pvals = []
+
     for dim_name, group_a, group_b, ratio_label in pairs:
         b_a = group_burdens[group_a]
         b_b = group_burdens[group_b]
@@ -162,19 +205,23 @@ def run_demographic_recourse_audit(
         mean_b = group_results[group_b]["mean_burden"]
         ratio = round(mean_a / mean_b, 3) if mean_b > 0 else 1.0
 
-        # Welch's t-test (unequal variances assumed)
-        t_stat, t_pval = stats.ttest_ind(b_a, b_b, equal_var=False)
-        # Mann-Whitney U test (non-parametric test of distributions)
-        u_stat, u_pval = stats.mannwhitneyu(b_a, b_b, alternative="two-sided")
+        # Welch's t-test (conditional burden)
+        t_stat, t_pval = stats.ttest_ind(b_a, b_b, equal_var=False) if (b_a and b_b) else (0.0, 1.0)
+        # Mann-Whitney U test (non-parametric conditional burden)
+        u_stat, u_pval = stats.mannwhitneyu(b_a, b_b, alternative="two-sided") if (b_a and b_b) else (0.0, 1.0)
 
-        is_significant = bool(t_pval < 0.05)
-        conclusion = (
-            f"Statistically significant disparity detected (p = {t_pval:.4f} < 0.05)."
-            if is_significant else
-            f"No statistically significant disparity (p = {t_pval:.4f} >= 0.05); observed difference is within sampling noise."
-        )
+        # Fisher's Exact Test on Recourse Feasibility (2x2 contingency table)
+        succ_a = group_results[group_a]["successful_recourse_n"]
+        fail_a = group_results[group_a]["infeasible_recourse_n"]
+        succ_b = group_results[group_b]["successful_recourse_n"]
+        fail_b = group_results[group_b]["infeasible_recourse_n"]
+        contingency_table = [[succ_a, fail_a], [succ_b, fail_b]]
+        odds_ratio, f_pval = stats.fisher_exact(contingency_table)
 
-        dimension_comparisons[dim_name.lower()] = {
+        welch_pvals.append(float(t_pval))
+        fisher_pvals.append(float(f_pval))
+
+        raw_comps.append({
             "dimension": dim_name,
             "group_a": group_a,
             "group_b": group_b,
@@ -185,11 +232,49 @@ def run_demographic_recourse_audit(
             "welch_t_pvalue": round(float(t_pval), 4),
             "mann_whitney_u": round(float(u_stat), 1),
             "mann_whitney_pvalue": round(float(u_pval), 4),
-            "is_statistically_significant": is_significant,
-            "conclusion": conclusion
-        }
+            "feasibility_gap_pct": round(group_results[group_a]["feasibility_rate_pct"] - group_results[group_b]["feasibility_rate_pct"], 1),
+            "fisher_odds_ratio": round(float(odds_ratio), 3),
+            "fisher_feasibility_pvalue": round(float(f_pval), 4),
+        })
 
-    # 5. Overall Feasibility & Audit Summary
+    # Apply Holm-Bonferroni correction across the 4 tests
+    welch_pvals_adj = holm_bonferroni_correction(welch_pvals)
+    fisher_pvals_adj = holm_bonferroni_correction(fisher_pvals)
+
+    dimension_comparisons = {}
+    for idx, c in enumerate(raw_comps):
+        dim_key = c["dimension"].lower()
+        t_pval = c["welch_t_pvalue"]
+        t_adj = welch_pvals_adj[idx]
+        f_pval = c["fisher_feasibility_pvalue"]
+        f_adj = fisher_pvals_adj[idx]
+
+        is_burden_sig = bool(t_pval < 0.05)
+        is_feasibility_sig = bool(f_pval < 0.05)
+
+        burden_conclusion = (
+            f"Diferencia estadísticamente significativa en carga (p = {t_pval:.4f}, p_adj = {t_adj:.4f} < 0.05)."
+            if is_burden_sig else
+            f"Sin evidencia de disparidad en carga algorítmica (p = {t_pval:.4f}, p_adj = {t_adj:.4f} >= 0.05); no se rechaza H0."
+        )
+
+        feasibility_conclusion = (
+            f"Brecha de factibilidad estadísticamente significativa (p = {f_pval:.4f}, p_adj = {f_adj:.4f} < 0.05)."
+            if is_feasibility_sig else
+            f"Sin brecha estadísticamente significativa en factibilidad (p = {f_pval:.4f}, p_adj = {f_adj:.4f} >= 0.05)."
+        )
+
+        c["welch_t_pvalue_holm_adjusted"] = t_adj
+        c["fisher_pvalue_holm_adjusted"] = f_adj
+        c["is_burden_statistically_significant"] = is_burden_sig
+        c["is_feasibility_statistically_significant"] = is_feasibility_sig
+        c["burden_conclusion"] = burden_conclusion
+        c["feasibility_conclusion"] = feasibility_conclusion
+        c["conclusion"] = f"{burden_conclusion} {feasibility_conclusion}"
+
+        dimension_comparisons[dim_key] = c
+
+    # 6. Overall Feasibility & Audit Summary
     all_evaluated = sum(g["evaluated_n"] for g in group_results.values())
     all_successful = sum(g["successful_recourse_n"] for g in group_results.values())
     overall_feasibility = round((all_successful / all_evaluated) * 100.0, 1) if all_evaluated > 0 else 0.0
@@ -203,8 +288,15 @@ def run_demographic_recourse_audit(
             "model_rejected_sample_size": int(len(rejected_test_df)),
             "threshold": threshold,
             "sample_per_group": sample_per_group,
-            "actionable_features": ["PAY_1", "BILL_AMT1", "PAY_AMT1"],
-            "locked_features": ["SEX", "AGE", "EDUCATION", "MARRIAGE", "LIMIT_BAL", "PAY_2..6", "BILL_AMT2..6", "PAY_AMT2..6"]
+            "actionable_features": ACTIONABLE_FEATURES,
+            "immutable_features": IMMUTABLE_FEATURES,
+            "historical_features": HISTORICAL_FEATURES,
+            "institutional_features": INSTITUTIONAL_FEATURES,
+            "methodology_notes": [
+                "Algorithmic burden is evaluated conditionally on applicants who achieve feasible recourse within constraints.",
+                "To account for potential survivorship bias where harder instances are dropped, recourse feasibility rates are independently audited via Fisher's Exact Test.",
+                "Holm-Bonferroni step-down corrections are reported to control family-wise error rate across multiple demographic hypotheses."
+            ]
         },
         "overall": {
             "evaluated_total": all_evaluated,
@@ -218,13 +310,13 @@ def run_demographic_recourse_audit(
         "comparisons": dimension_comparisons
     }
 
-    # 6. Save Structured JSON Output
+    # 7. Save Structured JSON Output
     json_path = os.path.join(output_dir, "audit_disparity_results.json")
     with open(json_path, "w") as f:
         json.dump(audit_summary, f, indent=4)
     print(f"\n[audit] Audit results successfully saved to: {json_path}")
 
-    # 7. Generate Publication-Quality Figure with 95% Confidence Intervals
+    # 8. Generate Publication-Quality Figure with 95% Confidence Intervals
     plot_data = []
     for g_name, g_info in group_results.items():
         plot_data.append({
@@ -253,7 +345,6 @@ def run_demographic_recourse_audit(
         "Marriage": "#059669"
     }
 
-    from matplotlib.patches import Patch
     colors = [palette[c] for c in df_plot["Category"]]
 
     ax = sns.barplot(
@@ -291,12 +382,12 @@ def run_demographic_recourse_audit(
     ax.legend(handles=legend_elements, title="Demographic Dimension", fontsize=9, title_fontsize=9.5, loc="upper right")
 
     plt.title(
-        "Algorithmic Recourse Burden Disparity across Demographic Dimensions\n"
-        "(Normalized L1 Distance on Hold-out Test Set with 95% Confidence Intervals)",
+        "Algorithmic Recourse Burden across Demographic Dimensions\n"
+        "(Conditional Normalized L1 Distance on Hold-out Test Set with 95% Confidence Intervals)",
         fontsize=12, fontweight="bold", pad=14
     )
     plt.xlabel("Demographic Subgroup", fontsize=10, fontweight="bold")
-    plt.ylabel("Mean Normalized L1 Burden", fontsize=10, fontweight="bold")
+    plt.ylabel("Mean Conditional L1 Burden", fontsize=10, fontweight="bold")
     plt.xticks(rotation=20, ha="right", fontsize=9)
     plt.ylim(0, max(df_plot["CI Upper"]) * 1.25)
     plt.tight_layout()
@@ -311,9 +402,10 @@ def run_demographic_recourse_audit(
 
 if __name__ == "__main__":
     summary = run_demographic_recourse_audit(sample_per_group=80)
-    print("\n--- AUDIT HYPOTHESIS TESTING SUMMARY ---")
+    print("\n--- AUDIT HYPOTHESIS TESTING SUMMARY (WITH HOLM-BONFERRONI CORRECTION) ---")
     for dim, comp in summary["comparisons"].items():
         print(f"\nDimension: {comp['dimension'].upper()}")
         print(f"  Ratio ({comp['ratio_label']}): {comp['disparity_ratio']}x (Mean diff: {comp['mean_difference']:+.2f})")
-        print(f"  Welch t-test: t = {comp['welch_t_stat']}, p = {comp['welch_t_pvalue']}")
-        print(f"  Conclusion:   {comp['conclusion']}")
+        print(f"  Conditional Burden Welch t-test: t = {comp['welch_t_stat']}, p_raw = {comp['welch_t_pvalue']}, p_holm = {comp['welch_t_pvalue_holm_adjusted']}")
+        print(f"  Feasibility Fisher Exact Test:   gap = {comp['feasibility_gap_pct']:+.1f}%, p_raw = {comp['fisher_feasibility_pvalue']}, p_holm = {comp['fisher_pvalue_holm_adjusted']}")
+        print(f"  Conclusion: {comp['conclusion']}")

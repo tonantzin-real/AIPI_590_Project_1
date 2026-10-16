@@ -26,8 +26,6 @@ BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(BASE_DIR)
 from src.data_loader import (
     CATEGORICAL_LABELS,
-    IMMUTABLE_FEATURES,
-    ACTIONABLE_FEATURES,
     DEFAULT_DATA_PATH
 )
 from src.xai_shap import CreditSHAPExplainer
@@ -164,14 +162,15 @@ pay_1 = st.sidebar.selectbox(
     [-2, -1, 0, 1, 2, 3],
     index=[-2, -1, 0, 1, 2, 3].index(init_pay1),
     format_func=lambda x: {
-        -2: "Sin consumo (-2)",
-        -1: "Pagado puntual (-1)",
-        0: "Uso crédito revolvente (0)",
+        -2: "Sin consumo / saldo cero (-2)",
+        -1: "Pagado puntual íntegro (-1)",
+        0: "Uso crédito revolvente c/pago mínimo (0)",
         1: "Retraso 1 mes (+1)",
         2: "Retraso 2 meses (+2)",
         3: "Retraso 3 meses (+3)"
     }[x]
 )
+st.sidebar.caption("ℹ️ *Nota de Dominio:* En la taxonomía UCI Credit, -2 y -1 representan cumplimiento superior o saldo liquidado, mientras que 0 indica financiamiento revolvente y valores positivos reflejan mora.")
 
 bill_amt1 = st.sidebar.number_input("Saldo Facturado Reciente (MXN):", min_value=0, max_value=500000, value=init_bill1, step=2500)
 pay_amt1 = st.sidebar.number_input("Monto Pagado Reciente (MXN):", min_value=0, max_value=300000, value=init_payamt1, step=1000)
@@ -262,7 +261,7 @@ with tab1:
         El solicitante tiene derecho a conocer **planes de acción mínimos y viables** para revertir la decisión.
         """)
 
-        with st.spinner("Calculando rutas accionables bajo restricciones estrictas de accionabilidad..."):
+        with st.spinner("Calculando rutas accionables bajo restricciones causales estrictas..."):
             cfs_df, deltas_df, mean_burden = recourse_engine.generate_recourse_plans(applicant_df, total_cfs=2)
 
         if not deltas_df.empty:
@@ -276,7 +275,7 @@ with tab1:
                             st.info(f"**{col_name}:** {val_str}")
                     st.caption("🔒 *Atributos inmutables (Edad, Género, Educación, Estado Civil), historial previo y límites bancarios se mantuvieron estrictamente congelados.*")
             
-            st.success(f"**Esfuerzo Algorítmico Promedio (Distancia L1 Normalizada):** {mean_burden:.2f}")
+            st.success(f"**Esfuerzo Algorítmico Promedio (Distancia L1 Condicional Normalizada):** {mean_burden:.2f}")
         else:
             st.warning("No se encontró un contra factual viable dentro de los límites de un solo paso. Se requiere reestructuración integral de deuda a mediano plazo.")
     else:
@@ -329,6 +328,7 @@ with tab2:
             - **Accionabilidad Estricta:** Solo modifica palancas financieras presentes (`PAY_1`, `BILL_AMT1`, `PAY_AMT1`).
             - **No Discriminación:** Bloquea explícitamente variables protegidas (Género, Edad, Educación, Estado Civil).
             - **Restricción Causal y Temporal:** No altera el historial crediticio pasado (`PAY_2..6`) ni límites fijados por el banco (`LIMIT_BAL`).
+            - **Restricciones Monótonas:** No permite empeorar el estatus de pago ni pagar más que el saldo facturado.
             - **Minimización de Esfuerzo:** Identifica la ruta de menor fricción financiera ($L_1$ distance).
             """)
         else:
@@ -351,6 +351,7 @@ with tab3:
             audit_data = json.load(f)
 
         comps = audit_data["comparisons"]
+        subgroups = audit_data["subgroups"]
         overall = audit_data["overall"]
 
         # 4 Key Demographic Dimensions Cards
@@ -364,9 +365,9 @@ with tab3:
                 "Género (Mujer / Hombre):",
                 f"{ratio_g:.3f}x",
                 delta=f"{(ratio_g - 1.0):+.1%} vs Paridad (1.00x)",
-                delta_color="off" if not g_comp["is_statistically_significant"] else "inverse"
+                delta_color="inverse" if g_comp["is_burden_statistically_significant"] else "off"
             )
-            st.caption(f"Welch t-test: p = {g_comp['welch_t_pvalue']:.3f} ({'Significativo' if g_comp['is_statistically_significant'] else 'Paridad Estadística'})")
+            st.caption(f"Welch t-test: p = {g_comp['welch_t_pvalue']:.3f} ({'Significativo (p < 0.05)' if g_comp['is_burden_statistically_significant'] else 'Sin diferencia significativa (p >= 0.05)'})")
 
         with col_a:
             a_comp = comps["age"]
@@ -375,9 +376,9 @@ with tab3:
                 "Edad (Jóvenes / Mayores):",
                 f"{ratio_a:.3f}x",
                 delta=f"{(ratio_a - 1.0):+.1%} vs Paridad (1.00x)",
-                delta_color="off" if not a_comp["is_statistically_significant"] else "inverse"
+                delta_color="inverse" if a_comp["is_burden_statistically_significant"] else "off"
             )
-            st.caption(f"Welch t-test: p = {a_comp['welch_t_pvalue']:.3f} ({'Significativo' if a_comp['is_statistically_significant'] else 'No significativo'})")
+            st.caption(f"Welch t-test: p = {a_comp['welch_t_pvalue']:.3f} ({'Significativo (p < 0.05)' if a_comp['is_burden_statistically_significant'] else 'Sin diferencia significativa (p >= 0.05)'})")
 
         with col_e:
             e_comp = comps["education"]
@@ -386,9 +387,9 @@ with tab3:
                 "Educación (Media / Superior):",
                 f"{ratio_e:.3f}x",
                 delta=f"{(ratio_e - 1.0):+.1%} vs Paridad (1.00x)",
-                delta_color="off" if not e_comp["is_statistically_significant"] else "inverse"
+                delta_color="inverse" if e_comp["is_burden_statistically_significant"] else "off"
             )
-            st.caption(f"Welch t-test: p = {e_comp['welch_t_pvalue']:.3f} ({'Significativo' if e_comp['is_statistically_significant'] else 'Paridad Estadística'})")
+            st.caption(f"Welch t-test: p = {e_comp['welch_t_pvalue']:.3f} ({'Significativo (p < 0.05)' if e_comp['is_burden_statistically_significant'] else 'Sin diferencia significativa (p >= 0.05)'})")
 
         with col_m:
             m_comp = comps["marriage"]
@@ -397,9 +398,9 @@ with tab3:
                 "Estado Civil (Soltero / Casado):",
                 f"{ratio_m:.3f}x",
                 delta=f"{(ratio_m - 1.0):+.1%} vs Paridad (1.00x)",
-                delta_color="off" if not m_comp["is_statistically_significant"] else "inverse"
+                delta_color="inverse" if m_comp["is_burden_statistically_significant"] else "off"
             )
-            st.caption(f"Welch t-test: p = {m_comp['welch_t_pvalue']:.3f} ({'Significativo' if m_comp['is_statistically_significant'] else 'Paridad Estadística'})")
+            st.caption(f"Welch t-test: p = {m_comp['welch_t_pvalue']:.3f} ({'Significativo (p < 0.05)' if m_comp['is_burden_statistically_significant'] else 'Sin diferencia significativa (p >= 0.05)'})")
 
         st.markdown("---")
 
@@ -407,13 +408,13 @@ with tab3:
         col_ov1, col_ov2, col_ov3 = st.columns(3)
         with col_ov1:
             st.metric("Tasa de Factibilidad Global:", f"{overall['feasibility_rate_pct']:.1f}%", delta="Rutas viables encontradas")
-            st.caption(f"{overall['successful_total']} de {overall['evaluated_total']} solicitudes evaluadas en test.")
+            st.caption(f"{overall['successful_total']} de {overall['evaluated_total']} solicitudes evaluadas en conjunto de prueba.")
         with col_ov2:
-            st.metric("Carga Algorítmica Media:", f"{overall['mean_burden']:.2f}", delta=f"IC 95%: [{overall['ci_95_lower']:.2f}, {overall['ci_95_upper']:.2f}]")
-            st.caption("Distancia L1 normalizada en desviaciones estándar poblacionales.")
+            st.metric("Carga Algorítmica Condicional Media:", f"{overall['mean_burden']:.2f}", delta=f"IC 95%: [{overall['ci_95_lower']:.2f}, {overall['ci_95_upper']:.2f}]")
+            st.caption("Distancia L1 normalizada en desviaciones estándar de la población.")
         with col_ov3:
-            st.metric("Población de Rechazo en Test:", f"{audit_data['metadata']['model_rejected_sample_size']:,}", delta=f"De {audit_data['metadata']['test_sample_size']:,} casos de prueba")
-            st.caption("Solicitudes con P(default) >= 50% en conjunto de prueba.")
+            st.metric("Población Denegada en Test:", f"{audit_data['metadata']['model_rejected_sample_size']:,}", delta=f"De {audit_data['metadata']['test_sample_size']:,} casos evaluados")
+            st.caption(f"Solicitudes con P(default) >= {audit_data['metadata']['threshold']:.0%}.")
 
         st.markdown("---")
 
@@ -426,34 +427,45 @@ with tab3:
 
         with col_recs:
             st.markdown("#### 🏛️ Conclusiones y Recomendaciones Regulatorias (CONDUSEF & Ley Fintech)")
+            
+            sub_high = subgroups["Higher Ed (Grad/Univ)"]
+            sub_sec = subgroups["Secondary / Other"]
+            sub_yng = subgroups["Young (< 30)"]
+            sub_old = subgroups["Older (>= 30)"]
+            
             st.markdown(f"""
-            1. **Paridad Estadística de Género (Razón: {ratio_g:.2f}x, p = {g_comp['welch_t_pvalue']:.3f}):**  
-               Bajo restricciones estrictas de accionabilidad (congelando historial pasado y atributos protegidos), la diferencia de esfuerzo entre hombres y mujeres es estadísticamente indistinguible de cero ($p > 0.05$).
-            2. **Tendencia Moderada por Edad (Razón: {ratio_a:.2f}x, p = {a_comp['welch_t_pvalue']:.3f}):**  
-               Los jóvenes menores de 30 años exhiben un esfuerzo promedio {((ratio_a - 1.0) * 100):.1f}% mayor que adultos consolidados, reflejando menor profundidad histórica.
-            3. **Brecha de Factibilidad por Educación:**  
-               Aunque la distancia media es equivalente ({ratio_e:.2f}x, $p = {e_comp['welch_t_pvalue']:.3f}$), los solicitantes con educación superior alcanzaron 85.0% de factibilidad frente a 73.8% en educación media, indicando mayor vulnerabilidad a rechazos irreversibles en el corto plazo.
-            4. **Recomendación de Política Pública:**  
-               La CONDUSEF debe exigir que las entidades fintech auditen formalmente las **tasas de factibilidad y pruebas de hipótesis de carga algorítmica** antes de desplegar modelos de crédito autónomos.
+            1. **Dimensión de Género ({g_comp['ratio_label']}: {g_comp['disparity_ratio']:.3f}x):**  
+               {g_comp['burden_conclusion']}
+            2. **Dimensión de Edad ({a_comp['ratio_label']}: {a_comp['disparity_ratio']:.3f}x):**  
+               {a_comp['burden_conclusion']}  
+               *Factibilidad:* {sub_yng['feasibility_rate_pct']:.1f}% en jóvenes vs. {sub_old['feasibility_rate_pct']:.1f}% en adultos mayores ({a_comp['feasibility_conclusion']}).
+            3. **Dimensión Educativa ({e_comp['ratio_label']}: {e_comp['disparity_ratio']:.3f}x):**  
+               {e_comp['burden_conclusion']}  
+               *Factibilidad:* {sub_high['feasibility_rate_pct']:.1f}% en educación superior vs. {sub_sec['feasibility_rate_pct']:.1f}% en educación media ({e_comp['feasibility_conclusion']}).
+            4. **Dimensión de Estado Civil ({m_comp['ratio_label']}: {m_comp['disparity_ratio']:.3f}x):**  
+               {m_comp['burden_conclusion']}
+            5. **Control de Sesgo de Supervivencia y Corrección Múltiple:**  
+               La carga condicional solo evalúa casos con solución factible ({overall['feasibility_rate_pct']:.1f}% global). Por ello, se audita simultáneamente la factibilidad mediante la prueba exacta de Fisher y se reportan correcciones Holm-Bonferroni para controlar la tasa de error por familia.
             """)
 
         # Statistical Testing Detail Expander
-        with st.expander("🔬 Ver Detalles de Pruebas de Hipótesis y Métricas Estadísticas"):
+        with st.expander("🔬 Ver Detalles de Pruebas de Hipótesis y Corrección Holm-Bonferroni"):
             st.markdown("### Tabla Comparativa de Pruebas Estadísticas")
             detail_records = []
             for dim_key, c_info in comps.items():
                 detail_records.append({
                     "Dimensión": c_info["dimension"],
-                    "Grupo A": c_info["group_a"],
-                    "Grupo B": c_info["group_b"],
-                    "Razón de Disparidad": f"{c_info['disparity_ratio']:.3f}x",
-                    "Diferencia de Medias": f"{c_info['mean_difference']:+.2f}",
-                    "Welch t-stat": f"{c_info['welch_t_stat']:.3f}",
-                    "p-value (t-test)": f"{c_info['welch_t_pvalue']:.4f}",
-                    "Mann-Whitney p-value": f"{c_info['mann_whitney_pvalue']:.4f}",
-                    "Significancia (α=0.05)": "Sí (p < 0.05)" if c_info["is_statistically_significant"] else "No (p >= 0.05)"
+                    "Grupo A vs Grupo B": f"{c_info['group_a']} vs {c_info['group_b']}",
+                    "Razón Carga": f"{c_info['disparity_ratio']:.3f}x",
+                    "Welch t (p raw)": f"{c_info['welch_t_pvalue']:.4f}",
+                    "Welch p (Holm adj)": f"{c_info['welch_t_pvalue_holm_adjusted']:.4f}",
+                    "Mann-Whitney p": f"{c_info['mann_whitney_pvalue']:.4f}",
+                    "Brecha Factibilidad": f"{c_info['feasibility_gap_pct']:+.1f}%",
+                    "Fisher Exact p (raw)": f"{c_info['fisher_feasibility_pvalue']:.4f}",
+                    "Fisher p (Holm adj)": f"{c_info['fisher_pvalue_holm_adjusted']:.4f}",
+                    "Significativo (α=0.05)": "Sí (p_adj < 0.05)" if (c_info["is_burden_statistically_significant"] or c_info["is_feasibility_statistically_significant"]) else "No (p >= 0.05)"
                 })
             st.dataframe(pd.DataFrame(detail_records), use_container_width=True)
 
     else:
-        st.warning("No se encontraron resultados de auditoría previa. Ejecute `src/audit.py` para generar métricas.")
+        st.warning("No se encontraron resultados de auditoría previa. Ejecute `python src/audit.py` para generar métricas.")

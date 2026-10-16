@@ -29,10 +29,18 @@ This project investigates **Algorithmic Recourse** through Counterfactual Explan
 
 ---
 
-## 🚀 Setup & Execution
+## 🚀 Setup & Execution (Fresh Clone)
 ```bash
 git clone git@github.com:tonantzin-real/AIPI_590_Project_1.git
 cd AIPI_590_Project_1
 pip install -r requirements.txt
+
+# Step 1: Ingest data and train champion LightGBM model (generates models/credit_model.joblib)
+python src/train_model.py
+
+# Step 2: Run multi-dimensional fairness audit with statistical testing (generates models/audit_disparity_results.json & plot)
+python src/audit.py
+
+# Step 3: Launch interactive Streamlit web application
 streamlit run app/main.py
 ```

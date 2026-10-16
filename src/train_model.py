@@ -24,7 +24,6 @@ from sklearn.metrics import (
     precision_score,
     recall_score,
     f1_score,
-    classification_report,
     confusion_matrix,
 )
 
@@ -36,8 +35,6 @@ from src.data_loader import (
     get_train_test_data,
     IMMUTABLE_FEATURES,
     ACTIONABLE_FEATURES,
-    HISTORICAL_FEATURES,
-    INSTITUTIONAL_FEATURES
 )
 
 DEFAULT_MODEL_DIR = os.path.join(BASE_DIR, "models")
