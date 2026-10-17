@@ -12,6 +12,14 @@ The project has three parts:
 
 ---
 
+## 🎬 Demo
+
+Selecting different applicant profiles in the app: the decision, the plain-language action plans, SHAP vs. DiCE, and the fairness audit.
+
+![Demo of the Why Was I Rejected? app](docs/demo.gif)
+
+---
+
 ## 📊 Results at a Glance
 
 | Question | Finding |
@@ -129,10 +137,6 @@ It opens at http://localhost:8501. The first launch downloads the dataset automa
 | 4. Launch the app | `streamlit run app/main.py` | — | Web app |
 
 For a quick audit check on a sample (~5 min): `python -c "from src.audit import run_demographic_recourse_audit as r; r(sample_per_group=80)"` (this overwrites the full results; re-run step 3 afterwards).
-
-**Notebook (optional):** `pip install jupyter`, then `jupyter notebook notebooks/01_baseline_model_and_recourse.ipynb`. It is saved with all outputs, so it can be read without running anything. Running all cells re-runs steps 2–3 (~20 min).
-
-**Deploy your own copy (optional):** on [Streamlit Community Cloud](https://streamlit.io/cloud), create a new app from this repository with main file `app/main.py`.
 
 ---
 

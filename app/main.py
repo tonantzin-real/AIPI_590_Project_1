@@ -340,7 +340,9 @@ with tab1:
                 with col_target:
                     st.markdown(f"#### 📋 {row['Plan_ID']} (Relative effort: {row['Normalized_Burden']:.2f})")
                     for change in recourse_changes(applicant_df.iloc[0], cfs_df.iloc[idx]):
-                        st.info(f"**{change['action']}:** {change['from']} ➔ {change['to']} ({change['difference']})")
+                        # Escape "$" so Streamlit's markdown does not render "$500 ➔ $16,281" as a LaTeX formula
+                        plan_text = f"{change['from']} ➔ {change['to']} ({change['difference']})".replace("$", "\\$")
+                        st.info(f"**{change['action']}:** {plan_text}")
                     st.caption("🔒 *Personal traits (age, sex, education, marital status), past payment history, and the bank-set credit limit were kept fixed.*")
             
             st.success(f"**Average algorithmic effort (normalized L1 distance):** {mean_burden:.2f}")
