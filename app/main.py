@@ -439,20 +439,6 @@ DIMENSION_LABELS = {
 }
 
 
-def burden_sentence(comp: dict) -> str:
-    p, p_adj = comp["welch_t_pvalue"], comp["welch_t_pvalue_holm_adjusted"]
-    if comp["is_burden_statistically_significant"]:
-        return f"Statistically significant difference in algorithmic burden (p = {p:.4f}, p_adj = {p_adj:.4f} < 0.05)."
-    return f"No evidence of a difference in algorithmic burden (p = {p:.4f}, p_adj = {p_adj:.4f} ≥ 0.05); we fail to reject H₀."
-
-
-def feasibility_sentence(comp: dict) -> str:
-    p, p_adj = comp["fisher_feasibility_pvalue"], comp["fisher_pvalue_holm_adjusted"]
-    if comp["is_feasibility_statistically_significant"]:
-        return f"statistically significant feasibility gap (p = {p:.4f}, p_adj = {p_adj:.4f} < 0.05)"
-    return f"no statistically significant feasibility gap (p = {p:.4f}, p_adj = {p_adj:.4f} ≥ 0.05)"
-
-
 with tab3:
     st.subheader("Fairness Audit: Does Everyone Get a Fair Path to Approval?")
 
@@ -470,7 +456,7 @@ with tab3:
             f"All {audit_data['metadata']['model_rejected_sample_size']:,} rejected applicants in the hold-out test set. "
             "**Effort** = size of the changes a plan requires (among applicants who got a plan). "
             "**Plan rate** = share of applicants for whom any feasible plan exists. "
-            "Significant = Holm-adjusted p < 0.05."
+            "Significant = unlikely to be due to chance (p < 0.05 after correcting for multiple comparisons)."
         )
 
         # One-line key finding, generated from the results
@@ -531,53 +517,36 @@ with tab3:
 
         with col_recs:
             st.markdown("#### 🏛️ Conclusions and Regulatory Recommendations (CONDUSEF & Mexico's Fintech Law)")
-            
-            sub_high = subgroups.get("Graduate / University", {})
-            sub_sec = subgroups.get("High school / Other", {})
-            sub_yng = subgroups.get("Under 30", {})
-            sub_old = subgroups.get("30 and older", {})
-            sub_male = subgroups.get("Male", {})
-            sub_female = subgroups.get("Female", {})
-            sub_married = subgroups.get("Married", {})
-            sub_single = subgroups.get("Single", {})
-            
-            st.markdown(f"""
-            1. **Gender ({DIMENSION_LABELS['gender'][1]}: {g_comp['disparity_ratio']:.3f}x):**  
-               {burden_sentence(g_comp)}  
-               *Feasibility:* {sub_female.get('feasibility_rate_pct', 0.0):.1f}% for female vs. {sub_male.get('feasibility_rate_pct', 0.0):.1f}% for male applicants ({feasibility_sentence(g_comp)}).
-            2. **Age ({DIMENSION_LABELS['age'][1]}: {a_comp['disparity_ratio']:.3f}x):**  
-               {burden_sentence(a_comp)}  
-               *Feasibility:* {sub_yng.get('feasibility_rate_pct', 0.0):.1f}% for applicants under 30 vs. {sub_old.get('feasibility_rate_pct', 0.0):.1f}% for applicants 30 and older ({feasibility_sentence(a_comp)}).
-            3. **Education ({DIMENSION_LABELS['education'][1]}: {e_comp['disparity_ratio']:.3f}x):**  
-               {burden_sentence(e_comp)}  
-               *Feasibility:* {sub_high.get('feasibility_rate_pct', 0.0):.1f}% for graduate/university vs. {sub_sec.get('feasibility_rate_pct', 0.0):.1f}% for high school/other ({feasibility_sentence(e_comp)}).
-            4. **Marital status ({DIMENSION_LABELS['marriage'][1]}: {m_comp['disparity_ratio']:.3f}x):**  
-               {burden_sentence(m_comp)}  
-               *Feasibility:* {sub_single.get('feasibility_rate_pct', 0.0):.1f}% for single vs. {sub_married.get('feasibility_rate_pct', 0.0):.1f}% for married applicants ({feasibility_sentence(m_comp)}).
-            5. **Survivorship bias and multiple-testing control:**  
-               Conditional burden only covers applicants with a feasible plan ({overall['feasibility_rate_pct']:.1f}% overall). Feasibility is therefore audited separately with Fisher's exact test, and Holm-Bonferroni corrections control the family-wise error rate (both per family of 4 tests and globally across all 8 tests).
-            """)
 
-        # Statistical Testing Detail Expander
-        with st.expander("🔬 Hypothesis Test Details and Holm-Bonferroni Correction"):
-            st.markdown("### Statistical Test Comparison Table")
-            detail_records = []
-            for dim_key, c_info in comps.items():
-                detail_records.append({
-                    "Dimension": DIMENSION_LABELS.get(dim_key, (c_info["dimension"],))[0],
-                    "Comparison": f"{c_info['group_a']} vs. {c_info['group_b']}",
-                    "Burden ratio": f"{c_info['disparity_ratio']:.3f}x",
-                    "Welch p (raw)": f"{c_info['welch_t_pvalue']:.4f}",
-                    "Welch p (Holm 4-tests)": f"{c_info['welch_t_pvalue_holm_adjusted']:.4f}",
-                    "Welch p (Holm global 8-tests)": f"{c_info.get('welch_t_pvalue_holm_global_8tests', c_info['welch_t_pvalue_holm_adjusted']):.4f}",
-                    "Feasibility gap": f"{c_info['feasibility_gap_pct']:+.1f} pts",
-                    "Fisher p (raw)": f"{c_info['fisher_feasibility_pvalue']:.4f}",
-                    "Fisher p (Holm 4-tests)": f"{c_info['fisher_pvalue_holm_adjusted']:.4f}",
-                    "Fisher p (Holm global 8-tests)": f"{c_info.get('fisher_pvalue_holm_global_8tests', c_info['fisher_pvalue_holm_adjusted']):.4f}",
-                    "Burden significant (p_adj < 0.05)": "Yes" if c_info["is_burden_statistically_significant"] else "No",
-                    "Feasibility significant (p_adj < 0.05)": "Yes" if c_info["is_feasibility_statistically_significant"] else "No"
-                })
-            st.dataframe(pd.DataFrame(detail_records), use_container_width=True)
+            # Interpretation only: the per-group numbers are already shown in the summary table above
+            access_gap_dims = [k for k, c in comps.items() if c["is_feasibility_statistically_significant"]]
+            effort_gap_dims = [k for k, c in comps.items() if c["is_burden_statistically_significant"]]
+            meaning = []
+            if access_gap_dims and not effort_gap_dims:
+                meaning.append(
+                    "**The gap is in access, not effort.** Once a plan exists, it asks about the same of everyone, "
+                    "but some groups are more often left with no realistic path to approval."
+                )
+            elif effort_gap_dims:
+                meaning.append("**Some groups must work harder to get approved**, which is a direct fairness concern for the model.")
+            else:
+                meaning.append("**No significant gaps were found** in either effort or access to a plan.")
+            if {"age", "marriage"} <= set(access_gap_dims):
+                meaning.append(
+                    "Age and marital status overlap (younger applicants are more often single), "
+                    "so these two gaps may reflect the same underlying pattern."
+                )
+            meaning.append(
+                "Effort is only measured for applicants who get a plan, so a group that gets fewer plans can look "
+                "like it needs less effort."
+            )
+            st.markdown("**What this means**\n" + "\n".join(f"- {m}" for m in meaning))
+            st.markdown("""
+            **Recommendations**
+            1. Require lenders to give rejected applicants **concrete steps to qualify**, not only the reasons for rejection.
+            2. Audit **who gets a path to approval at all**, not only how hard that path is.
+            3. Re-run this audit **whenever the model changes**, and check that recommended actions are affordable before showing them.
+            """)
 
     else:
         st.warning("No audit results found. Run `python src/audit.py` to generate them.")

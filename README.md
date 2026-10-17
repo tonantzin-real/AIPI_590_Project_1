@@ -52,7 +52,7 @@ People outside the traditional banking system are the least likely to know what 
 |---|---|
 | **1. Simulator & Actionable Recourse** | Enter a profile (or pick a preset). See the decision, the probability of default, and up to two action plans in plain language, e.g. *"Reduce your current statement balance (BILL_AMT1): $50,000 ➔ $13,245 (-$36,755)"*. |
 | **2. SHAP vs. DiCE** | Side-by-side comparison of SHAP's "why" (with readable feature names) and DiCE's "what to do", plus the measured actionability of SHAP's reasons across all rejected applicants. |
-| **3. Fairness Audit** | A one-line key finding, a summary table per demographic dimension, overall metrics, the burden chart, conclusions, and full statistical test details. |
+| **3. Fairness Audit** | A one-line key finding, a summary table per demographic dimension, overall metrics, the burden chart, and conclusions with regulatory recommendations. (Full statistical test details are in `models/audit_disparity_results.json` and the notebook.) |
 
 ---
 
