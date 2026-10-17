@@ -18,6 +18,8 @@ Selecting different applicant profiles in the app: the decision, the plain-langu
 
 ![Demo of the Why Was I Rejected? app](docs/demo.gif)
 
+📄 **Poster (36" × 24"):** [poster/poster.pdf](poster/poster.pdf)
+
 ---
 
 ## 📊 Results at a Glance
@@ -107,6 +109,8 @@ src/audit.py                Fairness audit with statistical tests; saves JSON + 
 notebooks/01_...ipynb       End-to-end report: data → model → SHAP → DiCE → audit → conclusions
 models/                     Trained model, metadata, and all results (JSON + chart)
 data/                       Created automatically on first run (dataset cache, not in git)
+docs/demo.gif               App demo recording
+poster/                     Print poster (PDF) and the script that builds it from the results (python poster/build_poster.py --pdf)
 ```
 
 ---

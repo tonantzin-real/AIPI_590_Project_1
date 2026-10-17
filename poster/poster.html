@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Why Was I Rejected? Poster</title>
+<style>
+  @page { size: 36in 24in; margin: 0; }
+  :root {
+    --ink: #0b0b0b;
+    --ink-2: #52514e;
+    --navy: #0b2a5b;
+    --accent: #2a78d6;
+    --accent-soft: #eaf2fc;
+    --warm: #eb6834;
+    --warm-soft: #fdf0ea;
+    --rule: #dcdbd5;
+    --panel: #f6f6f3;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    width: 36in; height: 24in; overflow: hidden;
+    background: #ffffff; color: var(--ink);
+    font-family: "Avenir Next", "Helvetica Neue", Arial, sans-serif;
+    font-size: 24pt; line-height: 1.32;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  .poster { width: 36in; height: 24in; display: flex; flex-direction: column; }
+
+  /* Header */
+  header {
+    background: var(--navy); color: #ffffff;
+    padding: 0.55in 0.7in 0.5in 0.7in;
+    display: flex; align-items: center; justify-content: space-between; gap: 0.6in;
+  }
+  header h1 { font-size: 104pt; line-height: 1.0; margin: 0; font-weight: 800; letter-spacing: -1pt; }
+  header .sub { font-size: 36pt; margin: 0.16in 0 0.14in 0; font-weight: 500; color: #dbe6f7; }
+  header .byline { font-size: 25pt; color: #b9c9e4; font-weight: 500; }
+  .qr { display: flex; align-items: center; gap: 0.3in; }
+  .qr .qrbox { background: #ffffff; padding: 0.27in; border-radius: 0.1in; }  /* >= 4-module quiet zone */
+  .qr img { width: 2.0in; height: 2.0in; display: block; }
+  .qr .qrtext { font-size: 22pt; line-height: 1.3; color: #dbe6f7; max-width: 6in; text-align: right; }
+  .qr .qrtext b { color: #ffffff; font-size: 26pt; }
+
+  /* Columns */
+  main {
+    flex: 1; display: grid;
+    grid-template-columns: 7.55fr 8.35fr 9.9fr 7.75fr;
+    gap: 0.8in; padding: 0.45in 0.8in 0.4in 0.8in;
+    min-height: 0;
+  }
+  .col { display: flex; flex-direction: column; gap: 0.3in; min-height: 0; }
+  .col.fill { justify-content: space-between; }
+  h2 {
+    font-size: 44pt; line-height: 1.05; margin: 0; color: var(--navy); font-weight: 800;
+    padding-bottom: 0.1in; border-bottom: 5pt solid var(--navy);
+  }
+  h2 .num { color: var(--accent); margin-right: 0.12in; }
+  h3 { font-size: 29pt; margin: 0 0 0.06in 0; color: var(--navy); font-weight: 700; line-height: 1.15; }
+  p { margin: 0; }
+  b, strong { font-weight: 600; }
+  .charttitle { font-size: 23pt; font-weight: 600; color: var(--ink); margin-top: 0.04in; }
+  ul, ol { margin: 0; padding-left: 0.36in; }
+  li { margin: 0 0 0.07in 0; }
+  .muted { color: var(--ink-2); }
+  .small { font-size: 20pt; line-height: 1.3; }
+  .src { font-size: 17pt; color: var(--ink-2); line-height: 1.25; }
+
+  /* Stat tiles */
+  .stats { display: flex; flex-direction: column; gap: 0.16in; }
+  .stat { display: grid; grid-template-columns: 2.35in 1fr; align-items: center; gap: 0.2in;
+           background: var(--panel); border-radius: 0.12in; padding: 0.16in 0.22in; }
+  .stat .big { font-size: 72pt; font-weight: 700; color: var(--navy); line-height: 1; }
+  .stat .what { font-size: 22.5pt; line-height: 1.27; }
+
+  .callout { background: var(--accent-soft); border-left: 8pt solid var(--accent); border-radius: 0.08in;
+              padding: 0.18in 0.24in; }
+  .callout.warm { background: var(--warm-soft); border-left-color: var(--warm); }
+  .rq { display: grid; grid-template-columns: 0.75in 1fr; gap: 0.08in 0.12in; align-items: baseline; }
+  .rq .tag { font-weight: 700; color: var(--accent); font-size: 26pt; }
+
+  /* Pipeline */
+  .pipeline { display: flex; flex-direction: column; gap: 0.14in; }
+  .step { display: grid; grid-template-columns: 0.62in 1fr; gap: 0.16in; align-items: start; }
+  .step .n { width: 0.62in; height: 0.62in; border-radius: 50%; background: var(--navy); color: #fff;
+              font-weight: 700; font-size: 26pt; display: flex; align-items: center; justify-content: center; }
+  .step .t { font-size: 22pt; line-height: 1.28; }
+  .step .t b { color: var(--navy); }
+
+  .rulebox { display: grid; grid-template-columns: 1fr 1fr; gap: 0.18in; font-size: 20pt; line-height: 1.32; }
+  .rb { border-radius: 0.1in; padding: 0.14in 0.18in; }
+  .rb.go { background: var(--accent-soft); }
+  .rb.lock { background: var(--panel); }
+  .rbt { font-size: 23pt; font-weight: 700; margin-bottom: 0.06in; }
+  .rb.go .rbt { color: var(--accent); }
+  .rb.lock .rbt { color: var(--ink-2); }
+  table.rules { width: 100%; border-collapse: collapse; font-size: 20pt; line-height: 1.25; }
+  table.rules th { text-align: left; background: var(--navy); color: #fff; padding: 0.07in 0.12in; font-weight: 600; }
+  table.rules td { padding: 0.07in 0.12in; border-bottom: 1.5pt solid var(--rule); vertical-align: top; }
+  table.rules tr.go td:first-child { color: var(--accent); font-weight: 600; }
+  table.rules tr.lock td:first-child { color: var(--ink-2); font-weight: 600; }
+
+  figure { margin: 0; }
+  figure img.shot { width: 100%; display: block; border-radius: 0.08in; border: 2pt solid var(--rule); }
+  figcaption { font-size: 19pt; color: var(--ink-2); margin-top: 0.06in; line-height: 1.25; }
+
+  /* Findings */
+  .finding { display: flex; flex-direction: column; gap: 0.1in; }
+  .headline { font-size: 27pt; font-weight: 400; line-height: 1.18; color: var(--ink); }
+  .headline .hl { color: var(--accent); font-weight: 700; }
+  .headline .hlw { color: var(--warm); font-weight: 700; }
+  .minis { display: flex; gap: 0.2in; }
+  .mini { flex: 1; background: var(--panel); border-radius: 0.1in; padding: 0.12in 0.18in; }
+  .mini .big { font-size: 40pt; font-weight: 700; color: var(--navy); line-height: 1.05; }
+  .mini .what { font-size: 19pt; line-height: 1.22; }
+  .plan { display: grid; grid-template-columns: auto 1fr; gap: 0.06in 0.2in; align-items: baseline;
+           background: var(--accent-soft); border-radius: 0.1in; padding: 0.14in 0.22in; font-size: 21pt; }
+  .plan .k { color: var(--navy); font-weight: 700; }
+
+  .example { background: var(--panel); border-radius: 0.12in; padding: 0.18in 0.22in; display: flex; flex-direction: column; gap: 0.08in; }
+  .example .profile { font-size: 21pt; color: var(--ink-2); }
+  .example .verdict { font-size: 24pt; font-weight: 600; color: #b42318; }
+  .example .twocol { display: grid; grid-template-columns: 1fr 1fr; gap: 0.16in; }
+  .example .box { background: #ffffff; border-radius: 0.1in; padding: 0.12in 0.16in; border: 2pt solid var(--rule); }
+  .example .planbox { border-color: var(--accent); }
+  .example .lbl { font-size: 22pt; font-weight: 700; color: var(--navy); margin-bottom: 0.04in; }
+  .example ol { padding-left: 0.32in; font-size: 19pt; line-height: 1.25; }
+  .example li { margin-bottom: 0.06in; }
+  .example .can { color: var(--accent); font-weight: 600; white-space: nowrap; }
+  .example .cant { color: var(--ink-2); font-weight: 600; white-space: nowrap; }
+  .example .approved { font-size: 19pt; font-weight: 600; color: #067647; }
+  .effortline { background: var(--panel); border-radius: 0.1in; padding: 0.12in 0.2in; font-size: 21pt; line-height: 1.28; }
+  .takeaways ol { padding-left: 0.42in; }
+  .takeaways li { font-size: 23pt; margin-bottom: 0.09in; }
+  .tight li { font-size: 22.5pt; line-height: 1.3; margin-bottom: 0.06in; }
+  .refs { font-size: 15pt; line-height: 1.25; color: var(--ink-2); }
+  .refs p { margin: 0 0 0.03in 0; text-indent: -0.2in; padding-left: 0.2in; }
+</style>
+</head>
+<body>
+<div class="poster">
+<header>
+  <div>
+    <h1>Why Was I Rejected?</h1>
+    <p class="sub">Turning credit rejections into actionable plans, and auditing who gets one</p>
+    <div class="byline">Tonantzin Real Rojas &nbsp;·&nbsp; AIPI 590: Explainable AI &nbsp;·&nbsp; Duke University</div>
+  </div>
+  <div class="qr">
+    <div class="qrtext"><b>Try the app &amp; see the code</b><br>github.com/tonantzin-real/<br>AIPI_590_Project_1<br><span style="font-size:18pt">Live demo GIF, notebook, and full results inside</span></div>
+    <div class="qrbox"><img src="assets/qr_repo.svg" alt="QR code linking to the GitHub repository"></div>
+  </div>
+</header>
+
+<main>
+  <!-- ===================== COLUMN 1: MOTIVATION ===================== -->
+  <section class="col fill">
+    <h2><span class="num">1</span>Why this matters</h2>
+    <p>In Mexico, millions of people are outside the formal financial system, and few know what lenders look for.</p>
+    <div class="stats">
+      <div class="stat"><div class="big">53%</div><div class="what">of Mexican adults have a formal financial account (vs. 73.5% in Latin America &amp; Caribbean)<br><span class="src">World Bank Global Findex, 2024 data</span></div></div>
+      <div class="stat"><div class="big">37%</div><div class="what">of adults (18–70) hold any formal credit<br><span class="src">INEGI &amp; CNBV, ENIF 2024</span></div></div>
+      <div class="stat"><div class="big">61%</div><div class="what">score below the minimum desirable level of financial knowledge<br><span class="src">BBVA Research, 2019 (OECD/INFE method)</span></div></div>
+    </div>
+    <div class="callout">
+      <h3>The problem</h3>
+      <p>When an algorithm rejects someone, today's explanations (e.g. <b>SHAP</b>) say <i>why</i>: "your payment history raised your risk." That helps the lender, but not the applicant, who needs to know <b>what to do next</b>.</p>
+    </div>
+    <p><b>Audience:</b> people applying for credit, especially first-time and underserved borrowers, not the lender.</p>
+    <div>
+      <h3>Research questions</h3>
+      <div class="rq">
+        <div class="tag">RQ1</div><div>How actionable are SHAP's explanations for rejected applicants?</div>
+        <div class="tag">RQ2</div><div>Can we offer realistic plans using only changes a person can make <b>today</b>?</div>
+        <div class="tag">RQ3</div><div>Is that path to approval <b>equally available</b> across sex, age, education, and marital status?</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== COLUMN 2: WHAT I BUILT ===================== -->
+  <section class="col fill">
+    <h2><span class="num">2</span>What I built</h2>
+    <div class="pipeline">
+      <div class="step"><div class="n">1</div><div class="t"><b>Credit model.</b> LightGBM on 30,000 credit card clients (UCI, Taiwan 2005), ROC-AUC 0.78. Rejected if predicted default risk ≥ 50%.</div></div>
+      <div class="step"><div class="n">2</div><div class="t"><b>Why? (SHAP).</b> Which of each person's top reasons could they actually change?</div></div>
+      <div class="step"><div class="n">3</div><div class="t"><b>What to do? (DiCE).</b> Plans that only change what a person controls, in plain language.</div></div>
+      <div class="step"><div class="n">4</div><div class="t"><b>Fairness audit.</b> All 1,749 rejected test applicants, across 4 demographic dimensions.</div></div>
+      <div class="step"><div class="n">5</div><div class="t"><b>Web app</b> where anyone can try a profile.</div></div>
+    </div>
+    <div>
+      <h3>Key design decision: what can a plan change?</h3>
+      <div class="rulebox">
+        <div class="rb go"><div class="rbt">✓ Can change</div>Payment status: only improve<br>Balance: only go down<br>Payment: only go up, up to the bill</div>
+        <div class="rb lock"><div class="rbt">🔒 Locked</div>Who you are: sex, age, education, marital status<br>The past: previous months<br>The lender's: credit limit</div>
+      </div>
+    </div>
+    <p class="small"><b>Effort</b> = how big a plan's changes are (normalized L1 distance). Group gaps tested with Fisher's exact and Welch's t-tests, corrected for multiple comparisons.</p>
+    <div class="example">
+      <h3>Example: one rejected applicant</h3>
+      <p class="profile">24 years old · 2-month delay · $45,000 balance · paid $500 last month</p>
+      <p class="verdict">✗ Rejected: 84.5% predicted risk of default</p>
+      <div class="twocol">
+        <div class="box shapbox"><div class="lbl">SHAP: <i>why?</i></div><ol><li>Payment status, this month <span class="can">✓ can change</span></li><li>Bank-set credit limit <span class="cant">✗ can't change</span></li><li>Amount paid, 2 months ago <span class="cant">✗ can't change</span></li></ol></div>
+        <div class="box planbox"><div class="lbl">Our plan: <i>what to do</i></div><ol><li><b>Catch up on payments:</b><br>2-month delay ➔ minimum payment made</li><li><b>Pay more this month:</b><br>$500 ➔ $16,281</li></ol>
+          <p class="approved">✓ Approved: risk drops to 46.3%</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== COLUMN 3: FINDINGS ===================== -->
+  <section class="col">
+    <h2><span class="num">3</span>What I found</h2>
+
+    <div class="finding">
+      <h3>RQ1 · SHAP explains the past, not the next step</h3>
+      <div class="headline"><span class="hl">68%</span> of SHAP's top reasons are things the applicant <b>can't change today</b>.</div>
+      <svg viewBox="0 0 900 206" width="100%" role="img" aria-label="Share of SHAP top-3 reasons by whether the applicant can change them"><rect x="0.0" y="64" width="285.9" height="86" fill="#2a78d6" rx="6"/><text x="143.0" y="120.0" text-anchor="middle" font-size="38" font-weight="700" fill="#ffffff">32%</text><rect x="288.9" y="64" width="489.7" height="86" fill="#8f8e88" rx="0"/><text x="532.3" y="120.0" text-anchor="middle" font-size="38" font-weight="700" fill="#ffffff">55%</text><rect x="781.6" y="64" width="109.4" height="86" fill="#bdbcb6" rx="0"/><rect x="894.0" y="64" width="6.0" height="86" fill="#dcdbd5" rx="6"/><text x="4.0" y="190" font-size="28" fill="#0b0b0b">Can change today</text><text x="289.9" y="190" font-size="28" fill="#0b0b0b">Past payment history</text><text x="891.0" y="48" text-anchor="end" font-size="26" fill="#52514e">Credit limit 12.5% · demographics 1%</text></svg>
+      <div class="minis">
+        <div class="mini"><div class="big">49.5%</div><div class="what">of rejected applicants: the #1 reason is not actionable</div></div>
+        <div class="mini"><div class="big">27.7%</div><div class="what">get no actionable reason at all in their top 3</div></div>
+      </div>
+    </div>
+
+    <div class="finding">
+      <h3>RQ2 · Realistic plans are possible for about half</h3>
+      <div class="headline"><span class="hl">47.2%</span> of rejected applicants (825 of 1,749) get a realistic plan using only 3 things they control.</div>
+    </div>
+
+    <div class="finding">
+      <h3>RQ3 · Equal effort, unequal access</h3>
+      <div class="headline">Effort is the same for everyone, but applicants who are <b>30 and older</b> or <b>married</b> get a plan <span class="hlw">less often</span>.</div>
+      <p class="charttitle">Out of the rejected applicants in each group, how many got a plan?</p>
+      <svg viewBox="0 0 960 628" width="100%" role="img" aria-label="Share of rejected applicants in each group who get a feasible plan"><text x="0" y="36" font-size="31" font-weight="600" fill="#0b0b0b">Sex</text><text x="330" y="36" font-size="27" font-weight="600" fill="#52514e">No significant difference</text><text x="22" y="88.0" font-size="29" font-weight="400" fill="#0b0b0b">Female</text><rect x="330" y="59.0" width="483.9" height="38" rx="5" fill="#c4c3bd"/><text x="801.9" y="88.0" text-anchor="end" font-size="29" font-weight="600" fill="#0b0b0b">47.6%</text><text x="22" y="136.0" font-size="29" font-weight="400" fill="#0b0b0b">Male</text><rect x="330" y="107.0" width="473.8" height="38" rx="5" fill="#c4c3bd"/><text x="791.8" y="136.0" text-anchor="end" font-size="29" font-weight="600" fill="#0b0b0b">46.6%</text><text x="0" y="192" font-size="31" font-weight="600" fill="#0b0b0b">Age</text><text x="330" y="192" font-size="27" font-weight="600" fill="#eb6834">★ Significant gap: 9.0 points</text><text x="22" y="244.0" font-size="29" font-weight="400" fill="#0b0b0b">Under 30</text><rect x="330" y="215.0" width="540.9" height="38" rx="5" fill="#2a78d6"/><text x="858.9" y="244.0" text-anchor="end" font-size="29" font-weight="600" fill="#ffffff">53.2%</text><text x="22" y="292.0" font-size="29" font-weight="600" fill="#0b0b0b">30 and older</text><rect x="330" y="263.0" width="449.4" height="38" rx="5" fill="#eb6834"/><text x="767.4" y="292.0" text-anchor="end" font-size="29" font-weight="600" fill="#ffffff">44.2%</text><text x="0" y="348" font-size="31" font-weight="600" fill="#0b0b0b">Education</text><text x="330" y="348" font-size="27" font-weight="600" fill="#52514e">No significant difference</text><text x="22" y="400.0" font-size="29" font-weight="400" fill="#0b0b0b">High school / Other</text><rect x="330" y="371.0" width="433.1" height="38" rx="5" fill="#c4c3bd"/><text x="751.1" y="400.0" text-anchor="end" font-size="29" font-weight="600" fill="#0b0b0b">42.6%</text><text x="22" y="448.0" font-size="29" font-weight="400" fill="#0b0b0b">Graduate / University</text><rect x="330" y="419.0" width="491.0" height="38" rx="5" fill="#c4c3bd"/><text x="809.0" y="448.0" text-anchor="end" font-size="29" font-weight="600" fill="#0b0b0b">48.3%</text><text x="0" y="504" font-size="31" font-weight="600" fill="#0b0b0b">Marital status</text><text x="330" y="504" font-size="27" font-weight="600" fill="#eb6834">★ Significant gap: 6.5 points</text><text x="22" y="556.0" font-size="29" font-weight="400" fill="#0b0b0b">Single</text><rect x="330" y="527.0" width="511.4" height="38" rx="5" fill="#2a78d6"/><text x="829.4" y="556.0" text-anchor="end" font-size="29" font-weight="600" fill="#ffffff">50.3%</text><text x="22" y="604.0" font-size="29" font-weight="600" fill="#0b0b0b">Married</text><rect x="330" y="575.0" width="445.3" height="38" rx="5" fill="#eb6834"/><text x="763.3" y="604.0" text-anchor="end" font-size="29" font-weight="600" fill="#ffffff">43.8%</text></svg>
+      <div class="effortline"><b>Effort, once a plan exists:</b> about the same for every group (group ratios 0.93x to 1.01x). No difference is significant.</div>
+    </div>
+  </section>
+
+  <!-- ===================== COLUMN 4: TAKEAWAYS, LIMITATIONS, FUTURE ===================== -->
+  <section class="col fill">
+    <h2><span class="num">4</span>Takeaways</h2>
+    <div class="takeaways callout">
+      <ol>
+        <li><b>Explanations should be actionable.</b> Attribution alone leaves most rejected applicants without a path forward.</li>
+        <li><b>Audit access, not only effort.</b> Here the unfairness is <i>who gets a plan at all</i>.</li>
+        <li><b>Realistic plans are possible</b> for about half of rejected applicants.</li>
+      </ol>
+    </div>
+
+    <div>
+      <h3>Limitations</h3>
+      <ul class="tight">
+        <li><b>Taiwanese data (2005)</b>, not Mexican; amounts are not in pesos.</li>
+        <li><b>Rejections are simulated</b> from predicted default risk.</li>
+        <li><b>Only 3 things can change</b>; no income or savings data.</li>
+        <li><b>Effort is statistical</b>, not the real cost for a given person.</li>
+        <li><b>Age and marital status overlap</b>; not tested jointly.</li>
+      </ul>
+    </div>
+
+    <div>
+      <h3>Risks &amp; responsible deployment</h3>
+      <ul class="tight">
+        <li><b>Unaffordable plans</b> could push people to informal loans.</li>
+        <li><b>Plans are guidance</b>, not guarantees.</li>
+        <li><b>Explanations need audits</b> to avoid fairwashing.</li>
+      </ul>
+    </div>
+
+    <div class="callout warm">
+      <h3>Future work: from v1 to Mexico</h3>
+      <ul class="tight">
+        <li>Retrain with a <b>Mexican institution's data</b>.</li>
+        <li><b>Spanish, mobile-first</b> app.</li>
+        <li>Affordable, multi-month plans.</li>
+        <li>User study with unbanked users.</li>
+      </ul>
+    </div>
+
+    <div class="refs">
+      <p>Wachter, Mittelstadt &amp; Russell (2017). Counterfactual explanations without opening the black box. <i>Harv. JOLT</i>.</p>
+      <p>Ustun, Spangher &amp; Liu (2019). Actionable recourse in linear classification. <i>FAT*</i>.</p>
+      <p>Mothilal, Sharma &amp; Tan (2020). Diverse counterfactual explanations (DiCE). <i>FAT*</i>.</p>
+      <p>Lundberg &amp; Lee (2017). A unified approach to interpreting model predictions. <i>NeurIPS</i>.</p>
+      <p>Sharma et al. (2020). CERTIFAI. <i>AIES</i>. · Karimi et al. (2022). Survey of algorithmic recourse. <i>ACM CSUR</i>.</p>
+      <p>Yeh &amp; Lien (2009). <i>Expert Syst. Appl.</i> · INEGI &amp; CNBV (2025) ENIF 2024 · World Bank (2025) Global Findex · BBVA Research (2019). Full list in the repo.</p>
+    </div>
+  </section>
+</main>
+</div>
+</body>
+</html>
