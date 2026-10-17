@@ -1,0 +1,29 @@
+{
+    "metadata": {
+        "rejected_applicants": 1749,
+        "threshold": 0.5,
+        "top_k": 3,
+        "actionable_features": [
+            "PAY_1",
+            "BILL_AMT1",
+            "PAY_AMT1"
+        ]
+    },
+    "share_of_top_k_reasons_pct": {
+        "actionable": 31.8,
+        "immutable": 1.0,
+        "historical": 54.8,
+        "institutional": 12.5,
+        "other": 0.0
+    },
+    "applicants_with_no_actionable_reason_in_top_k_pct": 27.7,
+    "applicants_whose_top_reason_is_not_actionable_pct": 49.5,
+    "applicants_with_demographic_reason_in_top_k_pct": 2.9,
+    "most_common_top_reasons": {
+        "PAY_1": 719,
+        "PAY_2": 366,
+        "LIMIT_BAL": 173,
+        "BILL_AMT1": 164,
+        "PAY_3": 93
+    }
+}

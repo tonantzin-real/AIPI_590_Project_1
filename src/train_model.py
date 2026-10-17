@@ -5,9 +5,10 @@ PROJECT: AIPI 590 - Project 1: Why Was I Rejected?
 AUTHOR: Tonantzin Real Rojas
 DESCRIPTION:
     Trains, evaluates, and serializes the champion credit scoring classifier
-    using LightGBM. In credit risk underwriting, we prioritize ROC-AUC and
-    calibrated probabilities to balance credit approval rates with default
-    prevention while enabling exact TreeSHAP computation.
+    using LightGBM. We prioritize ROC-AUC (ranking quality) and use balanced
+    class weights so the ~22% minority default class is not ignored; tree
+    ensembles also enable exact TreeSHAP computation. Note: predicted
+    probabilities are not calibrated (class weighting shifts them upward).
 =============================================================================
 """
 

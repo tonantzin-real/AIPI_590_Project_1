@@ -24,7 +24,7 @@ import seaborn as sns
 import sys
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(BASE_DIR)
-from src.data_loader import CATEGORICAL_LABELS, DEFAULT_DATA_PATH
+from src.data_loader import CATEGORICAL_LABELS, DEFAULT_DATA_PATH, download_and_clean_data
 from src.xai_shap import CreditSHAPExplainer
 from src.xai_recourse import CreditRecourseEngine
 
@@ -91,9 +91,11 @@ def load_models_and_engines():
     with open(meta_path, "r") as f:
         metadata = json.load(f)
     shap_explainer = CreditSHAPExplainer(model_path=model_path)
+    # Downloads and caches the dataset from OpenML on first launch (e.g. fresh clone or cloud deployment)
+    download_and_clean_data(cache_path=DEFAULT_DATA_PATH)
     recourse_engine = CreditRecourseEngine(
         model_path=model_path,
-        data_path=os.path.join(BASE_DIR, "data", "credit_card_clean.csv"),
+        data_path=DEFAULT_DATA_PATH,
         sample_size=1500
     )
     return model, metadata, shap_explainer, recourse_engine
@@ -380,8 +382,22 @@ with tab2:
         **Limitations of SHAP for the Applicant:**
         - It only assigns blame (*"Your balance is high and your history shows delays"*).
         - It does not say how much to pay or which concrete goal leads to approval.
-        - It often highlights traits the applicant cannot change.
         """)
+
+        shap_audit_path = os.path.join(BASE_DIR, "models", "shap_actionability_results.json")
+        if os.path.exists(shap_audit_path):
+            with open(shap_audit_path, "r") as f:
+                shap_audit = json.load(f)
+            shares = shap_audit["share_of_top_k_reasons_pct"]
+            not_actionable = round(100.0 - shares.get("actionable", 0.0), 1)
+            st.warning(
+                f"**Measured across all {shap_audit['metadata']['rejected_applicants']:,} rejected test applicants:** "
+                f"{not_actionable:.0f}% of SHAP's top-{shap_audit['metadata']['top_k']} reasons are things the applicant cannot change today "
+                f"(past payment history {shares.get('historical', 0.0):.0f}%, bank-set credit limit {shares.get('institutional', 0.0):.0f}%, "
+                f"demographics {shares.get('immutable', 0.0):.0f}%). For {shap_audit['applicants_whose_top_reason_is_not_actionable_pct']:.0f}% "
+                f"of applicants the #1 reason is not actionable, and {shap_audit['applicants_with_no_actionable_reason_in_top_k_pct']:.0f}% "
+                f"get no actionable reason at all."
+            )
 
     with col_dice:
         st.markdown("### 🚀 Responsible Approach: DiCE (Prescriptive)")
@@ -438,11 +454,7 @@ def feasibility_sentence(comp: dict) -> str:
 
 
 with tab3:
-    st.subheader("Regulatory Fairness and Algorithmic Burden Audit")
-    st.markdown("""
-    An empirical evaluation on the **hold-out test set** of whether the credit model imposes a 
-    **disproportionate algorithmic burden** across 4 demographic dimensions (sex, age, education, and marital status).
-    """)
+    st.subheader("Fairness Audit: Does Everyone Get a Fair Path to Approval?")
 
     audit_json_path = os.path.join(BASE_DIR, "models", "audit_disparity_results.json")
     if os.path.exists(audit_json_path):
@@ -452,54 +464,47 @@ with tab3:
         comps = audit_data["comparisons"]
         subgroups = audit_data["subgroups"]
         overall = audit_data["overall"]
-
         g_comp, a_comp, e_comp, m_comp = comps["gender"], comps["age"], comps["education"], comps["marriage"]
 
-        # Row 1: Burden test (Welch t-test) - effort needed among applicants who obtained a plan
-        st.markdown("#### 1. Effort Needed to Get Approved (Burden Ratio)")
-        st.caption("Compares the average effort of each group's plans, among applicants who obtained a plan. Tested with Welch's t-test.")
-        for col, dim_key in zip(st.columns(4), DIMENSION_LABELS):
-            comp = comps[dim_key]
-            ratio = comp["disparity_ratio"]
-            significant = comp["is_burden_statistically_significant"]
-            with col:
-                st.metric(
-                    f"{DIMENSION_LABELS[dim_key][0]} ({DIMENSION_LABELS[dim_key][1]}):",
-                    f"{ratio:.3f}x",
-                    delta=f"{(ratio - 1.0):+.1%} vs. parity (1.00x)",
-                    delta_color="inverse" if significant else "off"
-                )
-                st.caption(
-                    f"p = {comp['welch_t_pvalue']:.3f} (p_adj = {comp['welch_t_pvalue_holm_adjusted']:.3f}) | "
-                    f"{'⚠️ Significant difference' if significant else 'No significant difference'}"
-                )
-
-        # Row 2: Feasibility test (Fisher's exact test) - how often a plan exists at all
-        st.markdown("#### 2. Chance of Getting Any Plan (Recourse Feasibility)")
-        st.caption("Compares the share of rejected applicants in each group for whom a feasible plan exists. Tested with Fisher's exact test.")
-        for col, dim_key in zip(st.columns(4), DIMENSION_LABELS):
-            comp = comps[dim_key]
-            rate_a = subgroups.get(comp["group_a"], {}).get("feasibility_rate_pct", 0.0)
-            rate_b = subgroups.get(comp["group_b"], {}).get("feasibility_rate_pct", 0.0)
-            significant = comp["is_feasibility_statistically_significant"]
-            with col:
-                st.metric(
-                    f"{DIMENSION_LABELS[dim_key][0]} ({DIMENSION_LABELS[dim_key][1]}):",
-                    f"{rate_a:.1f}% vs. {rate_b:.1f}%",
-                    delta=f"{comp['feasibility_gap_pct']:+.1f} pts",
-                    delta_color="off"
-                )
-                st.caption(
-                    f"p = {comp['fisher_feasibility_pvalue']:.3f} (p_adj = {comp['fisher_pvalue_holm_adjusted']:.3f}) | "
-                    f"{'⚠️ Significant gap' if significant else 'No significant gap'}"
-                )
-
-        st.info(
-            "⚠️ **Methodological note on survivorship bias:** A conditional burden ratio below 1.00x should **not** be read as "
-            "lower effort if it comes with a lower feasibility rate. Effort is only measured for applicants who obtain a feasible plan "
-            "within the constraints; the most financially stressed profiles are dropped as infeasible, which can understate the "
-            "average burden of those groups."
+        st.caption(
+            f"All {audit_data['metadata']['model_rejected_sample_size']:,} rejected applicants in the hold-out test set. "
+            "**Effort** = size of the changes a plan requires (among applicants who got a plan). "
+            "**Plan rate** = share of applicants for whom any feasible plan exists. "
+            "Significant = Holm-adjusted p < 0.05."
         )
+
+        # One-line key finding, generated from the results
+        effort_gaps = [DIMENSION_LABELS[k][0].lower() for k, c in comps.items() if c["is_burden_statistically_significant"]]
+        plan_gaps = []
+        for k, c in comps.items():
+            if c["is_feasibility_statistically_significant"]:
+                rate_a = subgroups[c["group_a"]]["feasibility_rate_pct"]
+                rate_b = subgroups[c["group_b"]]["feasibility_rate_pct"]
+                low, low_rate, high_rate = (c["group_a"], rate_a, rate_b) if rate_a < rate_b else (c["group_b"], rate_b, rate_a)
+                plan_gaps.append(f"**{low.lower()}** applicants ({low_rate:.1f}% vs. {high_rate:.1f}%)")
+        effort_text = (
+            "No group needs significantly more effort to get approved."
+            if not effort_gaps else f"Effort differs significantly by {', '.join(effort_gaps)}."
+        )
+        plan_text = (
+            "Plan rates do not differ significantly across groups."
+            if not plan_gaps else f"But plans are found significantly less often for {' and '.join(plan_gaps)}."
+        )
+        st.markdown(f"**Key finding:** {effort_text} {plan_text}")
+
+        summary_rows = []
+        for dim_key, comp in comps.items():
+            rate_a = subgroups[comp["group_a"]]["feasibility_rate_pct"]
+            rate_b = subgroups[comp["group_b"]]["feasibility_rate_pct"]
+            summary_rows.append({
+                "Dimension": DIMENSION_LABELS[dim_key][0],
+                "Groups (A vs. B)": f"{comp['group_a']} vs. {comp['group_b']}",
+                "Effort ratio (A / B)": f"{comp['disparity_ratio']:.2f}x",
+                "Effort gap?": "⚠️ Significant" if comp["is_burden_statistically_significant"] else "No",
+                "Plan rate (A vs. B)": f"{rate_a:.1f}% vs. {rate_b:.1f}%",
+                "Plan-rate gap?": "⚠️ Significant" if comp["is_feasibility_statistically_significant"] else "No",
+            })
+        st.dataframe(pd.DataFrame(summary_rows), use_container_width=True, hide_index=True)
 
         st.markdown("---")
 
