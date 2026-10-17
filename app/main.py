@@ -453,53 +453,46 @@ with tab3:
         subgroups = audit_data["subgroups"]
         overall = audit_data["overall"]
 
-        # 4 Key Demographic Dimensions Cards
-        st.markdown("#### 1. Burden Ratios by Demographic Dimension")
-        col_g, col_a, col_e, col_m = st.columns(4)
+        g_comp, a_comp, e_comp, m_comp = comps["gender"], comps["age"], comps["education"], comps["marriage"]
 
-        with col_g:
-            g_comp = comps["gender"]
-            ratio_g = g_comp["disparity_ratio"]
-            st.metric(
-                f"{DIMENSION_LABELS['gender'][0]} ({DIMENSION_LABELS['gender'][1]}):",
-                f"{ratio_g:.3f}x",
-                delta=f"{(ratio_g - 1.0):+.1%} vs. parity (1.00x)",
-                delta_color="inverse" if g_comp["is_burden_statistically_significant"] else "off"
-            )
-            st.caption(f"Welch t-test: p = {g_comp['welch_t_pvalue']:.3f} (p_adj = {g_comp['welch_t_pvalue_holm_adjusted']:.3f}) | {'Significant' if g_comp['is_burden_statistically_significant'] else 'No significant difference'}")
+        # Row 1: Burden test (Welch t-test) - effort needed among applicants who obtained a plan
+        st.markdown("#### 1. Effort Needed to Get Approved (Burden Ratio)")
+        st.caption("Compares the average effort of each group's plans, among applicants who obtained a plan. Tested with Welch's t-test.")
+        for col, dim_key in zip(st.columns(4), DIMENSION_LABELS):
+            comp = comps[dim_key]
+            ratio = comp["disparity_ratio"]
+            significant = comp["is_burden_statistically_significant"]
+            with col:
+                st.metric(
+                    f"{DIMENSION_LABELS[dim_key][0]} ({DIMENSION_LABELS[dim_key][1]}):",
+                    f"{ratio:.3f}x",
+                    delta=f"{(ratio - 1.0):+.1%} vs. parity (1.00x)",
+                    delta_color="inverse" if significant else "off"
+                )
+                st.caption(
+                    f"p = {comp['welch_t_pvalue']:.3f} (p_adj = {comp['welch_t_pvalue_holm_adjusted']:.3f}) | "
+                    f"{'⚠️ Significant difference' if significant else 'No significant difference'}"
+                )
 
-        with col_a:
-            a_comp = comps["age"]
-            ratio_a = a_comp["disparity_ratio"]
-            st.metric(
-                f"{DIMENSION_LABELS['age'][0]} ({DIMENSION_LABELS['age'][1]}):",
-                f"{ratio_a:.3f}x",
-                delta=f"{(ratio_a - 1.0):+.1%} vs. parity (1.00x)",
-                delta_color="inverse" if a_comp["is_burden_statistically_significant"] else "off"
-            )
-            st.caption(f"Welch t-test: p = {a_comp['welch_t_pvalue']:.3f} (p_adj = {a_comp['welch_t_pvalue_holm_adjusted']:.3f}) | {'Significant' if a_comp['is_burden_statistically_significant'] else 'No significant difference'}")
-
-        with col_e:
-            e_comp = comps["education"]
-            ratio_e = e_comp["disparity_ratio"]
-            st.metric(
-                f"{DIMENSION_LABELS['education'][0]} ({DIMENSION_LABELS['education'][1]}):",
-                f"{ratio_e:.3f}x",
-                delta=f"{(ratio_e - 1.0):+.1%} vs. parity (1.00x)",
-                delta_color="inverse" if e_comp["is_burden_statistically_significant"] else "off"
-            )
-            st.caption(f"Welch t-test: p = {e_comp['welch_t_pvalue']:.3f} (p_adj = {e_comp['welch_t_pvalue_holm_adjusted']:.3f}) | {'Significant' if e_comp['is_burden_statistically_significant'] else 'No significant difference'}")
-
-        with col_m:
-            m_comp = comps["marriage"]
-            ratio_m = m_comp["disparity_ratio"]
-            st.metric(
-                f"{DIMENSION_LABELS['marriage'][0]} ({DIMENSION_LABELS['marriage'][1]}):",
-                f"{ratio_m:.3f}x",
-                delta=f"{(ratio_m - 1.0):+.1%} vs. parity (1.00x)",
-                delta_color="inverse" if m_comp["is_burden_statistically_significant"] else "off"
-            )
-            st.caption(f"Welch t-test: p = {m_comp['welch_t_pvalue']:.3f} (p_adj = {m_comp['welch_t_pvalue_holm_adjusted']:.3f}) | {'Significant' if m_comp['is_burden_statistically_significant'] else 'No significant difference'}")
+        # Row 2: Feasibility test (Fisher's exact test) - how often a plan exists at all
+        st.markdown("#### 2. Chance of Getting Any Plan (Recourse Feasibility)")
+        st.caption("Compares the share of rejected applicants in each group for whom a feasible plan exists. Tested with Fisher's exact test.")
+        for col, dim_key in zip(st.columns(4), DIMENSION_LABELS):
+            comp = comps[dim_key]
+            rate_a = subgroups.get(comp["group_a"], {}).get("feasibility_rate_pct", 0.0)
+            rate_b = subgroups.get(comp["group_b"], {}).get("feasibility_rate_pct", 0.0)
+            significant = comp["is_feasibility_statistically_significant"]
+            with col:
+                st.metric(
+                    f"{DIMENSION_LABELS[dim_key][0]} ({DIMENSION_LABELS[dim_key][1]}):",
+                    f"{rate_a:.1f}% vs. {rate_b:.1f}%",
+                    delta=f"{comp['feasibility_gap_pct']:+.1f} pts",
+                    delta_color="off"
+                )
+                st.caption(
+                    f"p = {comp['fisher_feasibility_pvalue']:.3f} (p_adj = {comp['fisher_pvalue_holm_adjusted']:.3f}) | "
+                    f"{'⚠️ Significant gap' if significant else 'No significant gap'}"
+                )
 
         st.info(
             "⚠️ **Methodological note on survivorship bias:** A conditional burden ratio below 1.00x should **not** be read as "
@@ -576,7 +569,8 @@ with tab3:
                     "Fisher p (raw)": f"{c_info['fisher_feasibility_pvalue']:.4f}",
                     "Fisher p (Holm 4-tests)": f"{c_info['fisher_pvalue_holm_adjusted']:.4f}",
                     "Fisher p (Holm global 8-tests)": f"{c_info.get('fisher_pvalue_holm_global_8tests', c_info['fisher_pvalue_holm_adjusted']):.4f}",
-                    "Significant (p_adj < 0.05)": "Yes (p_adj < 0.05)" if (c_info["is_burden_statistically_significant"] or c_info["is_feasibility_statistically_significant"]) else "No (p_adj ≥ 0.05)"
+                    "Burden significant (p_adj < 0.05)": "Yes" if c_info["is_burden_statistically_significant"] else "No",
+                    "Feasibility significant (p_adj < 0.05)": "Yes" if c_info["is_feasibility_statistically_significant"] else "No"
                 })
             st.dataframe(pd.DataFrame(detail_records), use_container_width=True)
 
